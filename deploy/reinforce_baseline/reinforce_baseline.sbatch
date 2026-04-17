@@ -16,6 +16,6 @@
 export RAY_TMPDIR=/data/user_data/gyeongwk/ray_tmp
 
 source ~/.bashrc
-conda activate osft
+conda activate compositional
 
 bash experiments/reinforce_baseline/reinforce_baseline.sh

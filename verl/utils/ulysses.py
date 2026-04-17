@@ -17,7 +17,7 @@ DeepSpeed Ulysses Paper: https://arxiv.org/abs/2309.14509
 Inspired from: https://github.com/deepspeedai/DeepSpeed/blob/master/deepspeed/sequence/layer.py
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, Tuple
 
 import torch
 import torch.distributed as dist
@@ -111,7 +111,7 @@ def _pad_tensor(x: Tensor, dim: int, padding_size: int) -> Tensor:
 def _unpad_tensor(x: Tensor, dim: int, padding_size: int) -> Tensor:
     slc = [slice(None)] * len(x.shape)
     slc[dim] = slice(0, -padding_size)
-    return x[tuple(slc)]
+    return x[slc]
 
 
 def slice_input_tensor(x: Tensor, dim: int, padding: bool = True, group: ProcessGroup = None) -> Tensor:
@@ -127,7 +127,7 @@ def slice_input_tensor(x: Tensor, dim: int, padding: bool = True, group: Process
     parts = x.size(dim) // sp_world_size
     slc = [slice(None)] * len(x.shape)
     slc[dim] = slice(sp_rank * parts, (sp_rank + 1) * parts)
-    return x[tuple(slc)].contiguous()
+    return x[slc].contiguous()
 
 
 def all_to_all_tensor(
@@ -179,7 +179,7 @@ class SeqAllToAll(torch.autograd.Function):
         return all_to_all_tensor(local_input, scatter_dim, gather_dim, group, async_op)
 
     @staticmethod
-    def backward(ctx: Any, *grad_output: Tensor) -> tuple[None, Tensor, None, None]:
+    def backward(ctx: Any, *grad_output: Tensor) -> Tuple[None, Tensor, None, None]:
         input_t = torch.cat(grad_output[1:], dim=ctx.gather_dim).contiguous() if ctx.async_op else grad_output[0]
         return (
             None,
@@ -234,13 +234,7 @@ class Gather(torch.autograd.Function):
         )
 
 
-def gather_outpus_and_unpad(*args, **kwargs):
-    raise RuntimeError(
-        "please use verl.utils.ulysses.gather_outputs_and_unpad instead of verl.utils.ulysses.gather_outpus_and_unpad"
-    )
-
-
-def gather_outputs_and_unpad(
+def gather_outpus_and_unpad(
     x: Tensor,
     gather_dim: int,
     unpad_dim: int = None,
@@ -275,9 +269,7 @@ def gather_outputs_and_unpad(
     return x
 
 
-def ulysses_pad(
-    input_ids_rmpad: torch.Tensor, position_ids_rmpad: Optional[torch.Tensor] = None, sp_size: int = 1, pad_value=0
-):
+def ulysses_pad(input_ids_rmpad: torch.Tensor, position_ids_rmpad: Optional[torch.Tensor] = None, sp_size: int = 1):
     if position_ids_rmpad is not None:
         assert position_ids_rmpad.size(-2) == 1
         assert input_ids_rmpad.size(-1) == position_ids_rmpad.size(-1)
@@ -286,22 +278,16 @@ def ulysses_pad(
     _, total_seq_len = input_ids_rmpad.shape
     pad_size = (sp_size - total_seq_len % sp_size) % sp_size
     if pad_size > 0:
-        input_ids_rmpad = torch.nn.functional.pad(input_ids_rmpad, (0, pad_size), value=pad_value)
+        input_ids_rmpad = torch.nn.functional.pad(input_ids_rmpad, (0, pad_size), value=0)
         if position_ids_rmpad is not None:
             pad_pos_ids = torch.arange(pad_size, device=position_ids_rmpad.device).unsqueeze(0)
             if position_ids_rmpad.dim() == 3:
-                pad_pos_ids = pad_pos_ids.unsqueeze(0).repeat(position_ids_rmpad.size(0), 1, 1)
+                pad_pos_ids = pad_pos_ids.unsqueeze(0).repeat(3, 1, 1)
             position_ids_rmpad = torch.cat((position_ids_rmpad, pad_pos_ids), dim=-1)
     return input_ids_rmpad, position_ids_rmpad, pad_size
 
 
-def ulysses_pad_and_slice_inputs(
-    input_ids_rmpad: torch.Tensor,
-    position_ids_rmpad: Optional[torch.Tensor] = None,
-    sp_size: int = 1,
-    skip_position_ids_rmpad: bool = False,
-    pad_value=0,
-):
+def ulysses_pad_and_slice_inputs(input_ids_rmpad: torch.Tensor, position_ids_rmpad: Optional[torch.Tensor] = None, sp_size: int = 1):
     """
     Pad and slice input_ids to be divisible by sp_size
     Pad position_ids to be divisible by sp_size.
@@ -314,24 +300,19 @@ def ulysses_pad_and_slice_inputs(
         input_ids_rmpad: shape of [bsz, seqlen]
         position_ids_rmpad: shape of [bsz, seqlen], where bsz must be 1
         sp_size (int): ulysses sequence parallelism size
-        skip_position_ids_rmpad: whether to skip position_ids_rmpad for VeOmniEngine
 
     Returns:
         torch.Tensor: padded and sliced input_ids
         torch.Tensor: padded and sliced position_ids
         int: pad size
     """
-    input_ids_rmpad, position_ids_rmpad, pad_size = ulysses_pad(
-        input_ids_rmpad, position_ids_rmpad, sp_size, pad_value=pad_value
-    )
+    input_ids_rmpad, position_ids_rmpad, pad_size = ulysses_pad(input_ids_rmpad, position_ids_rmpad, sp_size)
     input_ids_rmpad = slice_input_tensor(input_ids_rmpad, dim=1, padding=False)
-    if position_ids_rmpad is not None and not skip_position_ids_rmpad:
+    if position_ids_rmpad is not None:
         position_ids_rmpad = slice_input_tensor(position_ids_rmpad, dim=1, padding=False)
     return input_ids_rmpad, position_ids_rmpad, pad_size
 
 
 def validate_ulysses_config(num_heads, ulysses_sequence_size):
     if ulysses_sequence_size > 1:
-        assert num_heads % ulysses_sequence_size == 0, (
-            f"num_heads ({num_heads}) must be divisible by ulysses sequence size({ulysses_sequence_size})"
-        )
+        assert num_heads % ulysses_sequence_size == 0, f"num_heads ({num_heads}) must be divisible by ulysses sequence size({ulysses_sequence_size})"
