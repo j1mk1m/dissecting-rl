@@ -129,33 +129,26 @@ python3 -m recipe.osft.main_osft \
 ## Repository Structure
 
 ```
-experiments/osft/       # Bash scripts for each loss method
-  sft.sh
-  pos_neg.sh
-  reinforce_plus.sh
-  grpo.sh
-  grpo_mask.sh
+verl/                         # verl framework (Ray, FSDP, vLLM rollout)
+recipe/osft/                  # Training recipe (builds on verl)
+  main_osft.py                # Entry point
+  osft_trainer.py             # RayOSFTTrainer training loop
+  osft_sample_selection.py    # Per-sample weight computation (all 5 losses)
+  dp_actor.py                 # Weighted NLL loss + backward
+  config/osft_trainer.yaml    # All configurable options
 
-deploy/osft/            # Slurm sbatch wrappers
-  sft.sbatch
-  pos_neg.sbatch
-  reinforce_plus.sbatch
-  grpo.sbatch
-  grpo_mask.sbatch
+scripts/                      # Helpful utility scripts
+  data_preprocess/
+    string_data.py            # Dataset generation (25 operators, compositions)
+    string_data_analysis.py   # Composition distribution analysis
+  analysis/
+  generation/
+  evaluation/
 
-recipe/osft/
-  main_osft.py              # Entry point
-  osft_trainer.py           # RayOSFTTrainer training loop
-  osft_sample_selection.py  # Per-sample weight computation (all 5 losses)
-  dp_actor.py               # Weighted NLL loss + backward
-  config/osft_trainer.yaml  # All configurable options
-
-scripts/data_preprocess/
-  string_data.py            # Dataset generation (25 operators, compositions)
-  string_data_analysis.py   # Composition distribution analysis
-
-data/string_task/           # Train/eval parquet files by level
-verl/                       # verl framework (Ray, FSDP, vLLM rollout)
+data/                         # Train/eval dataset parquet files 
+eval/                         # Stores evaluation results
+experiments/                  # Bash scripts to run experiments
+deploy/                       # Slurm sbatch wrappers 
 ```
 
 ---

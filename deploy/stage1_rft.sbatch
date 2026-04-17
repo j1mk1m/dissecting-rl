@@ -30,4 +30,4 @@ export BATCH_SIZE=128
 export EPOCHS=2
 export SAVE_DIR=/data/user_data/gyeongwk/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}
 
-bash examples/sft/template.sh
+bash experiments/sft/template.sh
