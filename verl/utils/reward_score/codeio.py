@@ -302,7 +302,7 @@ def compute_score_backward(solution, ground_truth):
 
     if not isinstance(solution, dict):
         print("The input parameter is not a valid JSON object!")
-        return -1
+        return 0
 
     exact_match = True
     for k, v in ref_input.items():
@@ -310,7 +310,7 @@ def compute_score_backward(solution, ground_truth):
             continue
         exact_match = False
     if exact_match:
-        return 1
+        return 0
 
     # Run the code with the input
     code = template_check_input.format(solution_prefix=solution_prefix,
@@ -375,28 +375,28 @@ def compute_score(solution_str, ground_truth, task="codeio-backward"):
         extracted = extraction(solution_str)
         if extracted is None:
             print("Fail to extract a complete and valid json from the model response!")
-            return -1
+            return 0
     except Exception as e:
         print(f"Error in extracting JSON: {e}")
-        return -1
+        return 0
 
     print(f"[Extracted]\n{extracted}")
 
     if (task.startswith('backward') or task.startswith('forward')) and not isinstance(extracted, dict):
         print("The extracted JSON is not a valid JSON object!")
-        return -1
+        return 0
 
     try:
         if task.startswith('backward'):
             if "input" not in extracted:
                 print("No field 'input' in the extracted JSON!")
-                return -1
+                return 0
             input_param = extracted['input']
             return compute_score_backward(input_param, ground_truth)
         elif task.startswith('forward'):
             if "output" not in extracted:
                 print("No field 'output' in the extracted JSON!")
-                return -1
+                return 0
             output = extracted['output']
             return compute_score_forward(output, ground_truth)
         elif task.startswith('induction'):
@@ -405,4 +405,4 @@ def compute_score(solution_str, ground_truth, task="codeio-backward"):
             raise NotImplementedError(f"Task {task} not implemented.")
     except Exception as e:
         print(f"Error {e}")
-        return -1
+        return 0
