@@ -38,6 +38,7 @@ from verl.utils.metric import (
 )
 from verl.utils.tracking import ValidationGenerationsLogger
 
+from recipe.osft.data_source_controller import TrajectoryDataSourceController
 from recipe.osft.osft_sample_selection import SAMPLE_WEIGHT_KEY, apply_reward_processing
 
 WorkerType = Type[Worker]
@@ -127,6 +128,10 @@ class RayOSFTTrainer(RayPPOTrainer):
         # we start from step 1
         self.global_steps += 1
         last_val_metrics = None
+        data_source_controller = TrajectoryDataSourceController.from_omegaconf(
+            self.config.trainer.get("data_source", {}),
+            total_training_steps=self.total_training_steps,
+        )
 
         for epoch in range(self.config.trainer.total_epochs):
 
@@ -152,70 +157,77 @@ class RayOSFTTrainer(RayPPOTrainer):
                 is_last_step = self.global_steps >= self.total_training_steps
 
                 with _timer("step", timing_raw):
-                    # generate a batch
-                    with _timer("gen", timing_raw):
-                        if not self.async_rollout_mode:
-                            gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
-                        else:
-                            self.async_rollout_manager.wake_up()
-                            gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch)
-                            self.async_rollout_manager.sleep()
-                        timing_raw.update(gen_batch_output.meta_info["timing"])
-                        gen_batch_output.meta_info.pop("timing", None)
+                    current_on_policy_batch = None
+                    if data_source_controller.needs_rollout_generation():
+                        # generate a batch
+                        with _timer("gen", timing_raw):
+                            if not self.async_rollout_mode:
+                                gen_batch_output = self.actor_rollout_wg.generate_sequences(gen_batch)
+                            else:
+                                self.async_rollout_manager.wake_up()
+                                gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch)
+                                self.async_rollout_manager.sleep()
+                            timing_raw.update(gen_batch_output.meta_info["timing"])
+                            gen_batch_output.meta_info.pop("timing", None)
 
-                    batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
+                        batch.non_tensor_batch["uid"] = np.array([str(uuid.uuid4()) for _ in range(len(batch.batch))], dtype=object)
 
-                    # repeat to align with repeated responses in rollout
-                    batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
-                    batch = batch.union(gen_batch_output)
+                        # repeat to align with repeated responses in rollout
+                        batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
+                        batch = batch.union(gen_batch_output)
+                        batch.batch["response_mask"] = compute_response_mask(batch)
 
-                    batch.batch["response_mask"] = compute_response_mask(batch)
+                        # compute scores using function-based reward 'model'
+                        if self.config.trainer.enable_train_reward and self.reward_fn is not None:
+                            reward_tensor = self.reward_fn(batch)
+                            batch.batch["token_level_scores"] = reward_tensor
+                            # we do not have adv, therefore we use scores as rewards
+                            batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
 
-                    # compute scores using function-based reward 'model'
-                    if self.config.trainer.enable_train_reward and self.reward_fn is not None:
-                        reward_tensor = self.reward_fn(batch)
-                        batch.batch["token_level_scores"] = reward_tensor
-                        # we do not have adv, therefore we use scores as rewards
-                        batch.batch["token_level_rewards"] = batch.batch["token_level_scores"]
+                            sequence_score = batch.batch["token_level_scores"].sum(-1)
+                            metrics.update(
+                                {
+                                    "reward/score/mean": torch.mean(sequence_score).item(),
+                                    "reward/score/max": torch.max(sequence_score).item(),
+                                    "reward/score/min": torch.min(sequence_score).item(),
+                                }
+                            )
 
-                        sequence_score = batch.batch["token_level_scores"].sum(-1)
-                        metrics.update(
-                            {
-                                "reward/score/mean": torch.mean(sequence_score).item(),
-                                "reward/score/max": torch.max(sequence_score).item(),
-                                "reward/score/min": torch.min(sequence_score).item(),
-                            }
-                        )
+                            batch, group_metrics = apply_reward_processing(
+                                batch,
+                                reward_baseline=self.config.trainer.get(
+                                    "reward_baseline", "none"
+                                ),
+                                reward_normalize_std=bool(self.config.trainer.get(
+                                    "reward_normalize_std", False
+                                )),
+                                reward_std_eps=float(self.config.trainer.get(
+                                    "reward_std_eps", 1e-8
+                                )),
+                                enable_negative_sample_training=self.config.trainer.get(
+                                    "enable_negative_sample_training", False
+                                ),
+                                negative_sample_loss_scale=float(
+                                    self.config.trainer.get("negative_sample_loss_scale", 1.0)
+                                ),
+                                dp_world_size=getattr(self.actor_rollout_wg, "world_size", 1),
+                                rollout_n=getattr(self.config.actor_rollout_ref.rollout, "n", None),
+                            )
+                            metrics.update(group_metrics)
+                            if len(batch) == 0:
+                                continue
+                            if SAMPLE_WEIGHT_KEY in batch.batch.keys():
+                                weights = batch.batch[SAMPLE_WEIGHT_KEY]
+                                metrics["training/n_positive_seq"] = int((weights > 0).sum().item())
+                                metrics["training/n_negative_seq"] = int((weights < 0).sum().item())
+                                metrics["training/weight_mean"] = float(weights.mean().item())
+                                metrics["training/weight_std"] = float(weights.std().item()) if weights.numel() > 1 else 0.0
+                        current_on_policy_batch = batch
 
-                        batch, group_metrics = apply_reward_processing(
-                            batch,
-                            reward_baseline=self.config.trainer.get(
-                                "reward_baseline", "none"
-                            ),
-                            reward_normalize_std=bool(self.config.trainer.get(
-                                "reward_normalize_std", False
-                            )),
-                            reward_std_eps=float(self.config.trainer.get(
-                                "reward_std_eps", 1e-8
-                            )),
-                            enable_negative_sample_training=self.config.trainer.get(
-                                "enable_negative_sample_training", False
-                            ),
-                            negative_sample_loss_scale=float(
-                                self.config.trainer.get("negative_sample_loss_scale", 1.0)
-                            ),
-                            dp_world_size=getattr(self.actor_rollout_wg, "world_size", 1),
-                            rollout_n=getattr(self.config.actor_rollout_ref.rollout, "n", None),
-                        )
-                        metrics.update(group_metrics)
-                        if len(batch) == 0:
-                            continue
-                        if SAMPLE_WEIGHT_KEY in batch.batch.keys():
-                            weights = batch.batch[SAMPLE_WEIGHT_KEY]
-                            metrics["training/n_positive_seq"] = int((weights > 0).sum().item())
-                            metrics["training/n_negative_seq"] = int((weights < 0).sum().item())
-                            metrics["training/weight_mean"] = float(weights.mean().item())
-                            metrics["training/weight_std"] = float(weights.std().item()) if weights.numel() > 1 else 0.0
+                    batch, data_source_metrics = data_source_controller.select_training_batch(current_on_policy_batch)
+                    metrics.update(data_source_metrics)
+                    if len(batch) == 0:
+                        continue
 
                     # Balance the number of valid tokens across DP ranks.
                     # NOTE: This usually changes the order of data in the `batch`,
