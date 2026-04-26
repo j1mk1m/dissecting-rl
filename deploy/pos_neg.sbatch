@@ -4,7 +4,7 @@
 #SBATCH --job-name=reinforce
 #SBATCH --chdir=/home/gyeongwk/compositional-generality # working directory
 
-#SBATCH --gres=gpu:8
+#SBATCH --gres=gpu:4
 #SBATCH --mem=512GB
 #SBATCH --cpus-per-task=8 # cpus
 
@@ -18,4 +18,4 @@ export RAY_TMPDIR=/data/user_data/gyeongwk/ray_tmp
 source ~/.bashrc
 conda activate osft
 
-bash experiments/reinforce_baseline/reinforce_baseline.sh
+bash experiments/pos_neg.sh

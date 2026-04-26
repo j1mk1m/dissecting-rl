@@ -187,7 +187,7 @@ class RayOSFTTrainer(RayPPOTrainer):
                             }
                         )
 
-                        batch = apply_reward_processing(
+                        batch, group_metrics = apply_reward_processing(
                             batch,
                             reward_baseline=self.config.trainer.get(
                                 "reward_baseline", "none"
@@ -207,6 +207,7 @@ class RayOSFTTrainer(RayPPOTrainer):
                             dp_world_size=getattr(self.actor_rollout_wg, "world_size", 1),
                             rollout_n=getattr(self.config.actor_rollout_ref.rollout, "n", None),
                         )
+                        metrics.update(group_metrics)
                         if len(batch) == 0:
                             continue
                         if SAMPLE_WEIGHT_KEY in batch.batch.keys():

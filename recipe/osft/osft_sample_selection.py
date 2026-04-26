@@ -47,7 +47,7 @@ def apply_reward_processing(
     negative_sample_loss_scale: float = 1.0,
     dp_world_size: int = 1,
     rollout_n: int | None = None,
-) -> DataProto:
+) -> tuple[DataProto, dict]:
     """Filter and weight rollouts for on-policy training.
 
     Args:
@@ -94,6 +94,7 @@ def apply_reward_processing(
         )
 
 
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -106,7 +107,7 @@ def _apply_osft_filter(
     negative_sample_loss_scale: float,
     dp_world_size: int,
     rollout_n: int | None,
-) -> DataProto:
+) -> tuple[DataProto, dict]:
     """Original OSFT binary-filtering logic (unchanged behaviour).
 
     Positive rule per uid:
@@ -128,18 +129,27 @@ def _apply_osft_filter(
         per_uid.setdefault(uid, []).append((i, float(scores[i].item())))
 
     positive_indices: list[int] = []
+    n_all_positive_groups = 0
+    n_all_negative_groups = 0
     for uid, lst in per_uid.items():
         correct = [idx for (idx, s) in lst if s > 0]
         c = len(correct)
         if c == 0:
+            n_all_negative_groups += 1
             continue
         n = rollout_n if rollout_n is not None else len(lst)
         if c == n:
+            n_all_positive_groups += 1
             continue
         positive_indices.extend(correct)
 
+    group_metrics = {
+        "training/n_all_positive_groups": n_all_positive_groups,
+        "training/n_all_negative_groups": n_all_negative_groups,
+    }
+
     if not positive_indices:
-        return batch.select_idxs([])
+        return batch.select_idxs([]), group_metrics
 
     positive_set = set(positive_indices)
 
@@ -158,7 +168,7 @@ def _apply_osft_filter(
     if dp_world_size > 1:
         trim_len = (len(merged_indices) // dp_world_size) * dp_world_size
         if trim_len == 0:
-            return batch.select_idxs([])
+            return batch.select_idxs([]), group_metrics
         merged_indices = merged_indices[:trim_len]
 
     out = batch.select_idxs(merged_indices)
@@ -174,7 +184,7 @@ def _apply_osft_filter(
                 signs, device=device, dtype=torch.float32
             )
 
-    return out
+    return out, group_metrics
 
 
 def _apply_advantage_weighting(
@@ -183,7 +193,7 @@ def _apply_advantage_weighting(
     normalize_std: bool,
     std_eps: float,
     dp_world_size: int,
-) -> DataProto:
+) -> tuple[DataProto, dict]:
     """Advantage-weighted sample selection for baseline-subtracted / GRPO training.
 
     For each uid group:
@@ -201,6 +211,8 @@ def _apply_advantage_weighting(
         per_uid.setdefault(uid, []).append((i, float(scores[i].item())))
 
     advantages: list[float] = [0.0] * len(uids)
+    n_all_positive_groups = 0
+    n_all_negative_groups = 0
 
     for uid, lst in per_uid.items():
         indices = [idx for idx, _ in lst]
@@ -209,24 +221,36 @@ def _apply_advantage_weighting(
         mean = sum(values) / len(values)
         advs = [v - mean for v in values]
 
+        if all(v > 0 for v in values):
+            n_all_positive_groups += 1
+        elif all(v <= 0 for v in values):
+            n_all_negative_groups += 1
+
         if normalize_std:
             # Population variance (mean of squared deviations; mean(advs)=0)
             variance = sum(a * a for a in advs) / len(advs)
             std = variance ** 0.5
             advs = [a / (std + std_eps) for a in advs]
+        else:
+            advs = [a * 2.0 for a in advs] # Apply scaling factor of 2
 
         for idx, adv in zip(indices, advs):
             advantages[idx] = adv
 
+    group_metrics = {
+        "training/n_all_positive_groups": n_all_positive_groups,
+        "training/n_all_negative_groups": n_all_negative_groups,
+    }
+
     kept_indices = [i for i, adv in enumerate(advantages) if adv != 0.0]
 
     if not kept_indices:
-        return batch.select_idxs([])
+        return batch.select_idxs([]), group_metrics
 
     if dp_world_size > 1:
         trim_len = (len(kept_indices) // dp_world_size) * dp_world_size
         if trim_len == 0:
-            return batch.select_idxs([])
+            return batch.select_idxs([]), group_metrics
         kept_indices = kept_indices[:trim_len]
 
     out = batch.select_idxs(kept_indices)
@@ -234,7 +258,7 @@ def _apply_advantage_weighting(
     out.batch[SAMPLE_WEIGHT_KEY] = torch.tensor(
         [advantages[idx] for idx in kept_indices], device=device, dtype=torch.float32
     )
-    return out
+    return out, group_metrics
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +272,7 @@ def apply_osft_sample_selection(
     negative_sample_loss_scale: float,
     dp_world_size: int,
     rollout_n: int | None,
-) -> DataProto:
+) -> tuple[DataProto, dict]:
     """Deprecated: use apply_reward_processing with reward_baseline='none' instead."""
     return apply_reward_processing(
         batch,

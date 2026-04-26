@@ -64,6 +64,12 @@ def analyze(parquet_path: str) -> None:
     df = pd.read_parquet(parquet_path)
     print(f"Loaded {len(df)} rows from '{parquet_path}'")
 
+    from collections import Counter
+    data_source_counts = Counter(df["data_source"])
+    print("\nData source counts:")
+    for ds, count in data_source_counts.items():
+        print(f"{ds}: {count}")
+
     combo_counts: Counter = Counter()
 
     for _, row in df.iterrows():

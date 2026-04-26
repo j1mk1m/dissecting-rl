@@ -2,8 +2,11 @@ logs
 outputs
 verl.egg-info
 data/
+eval
+plots
 
 
 **/__pycache__
 __pycache__
 wandb
+*.pyc

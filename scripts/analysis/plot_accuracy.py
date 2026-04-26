@@ -14,6 +14,24 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
+BASE_FONT_SIZE = 12
+
+
+def configure_plot_style():
+    """Apply consistent, larger font sizes to all plot text."""
+    plt.rcParams.update(
+        {
+            "font.size": BASE_FONT_SIZE,
+            "axes.titlesize": BASE_FONT_SIZE + 3,
+            "axes.labelsize": BASE_FONT_SIZE + 1,
+            "xtick.labelsize": BASE_FONT_SIZE,
+            "ytick.labelsize": BASE_FONT_SIZE,
+            "legend.fontsize": BASE_FONT_SIZE,
+            "figure.titlesize": BASE_FONT_SIZE + 3,
+        }
+    )
+    pass
+
 
 def load_accuracy(path: Path) -> dict[int, dict]:
     """Return {depth: {pass_at_1: float, pass_at_n: float}} from accuracy.json."""
@@ -30,6 +48,7 @@ def load_accuracy(path: Path) -> dict[int, dict]:
 
 
 def plot(exp_dirs: list[Path], labels: list[str], metric: str, output: str | None):
+    configure_plot_style()
     fig, ax = plt.subplots(figsize=(8, 5))
 
     for exp_dir, label in zip(exp_dirs, labels):
@@ -44,9 +63,9 @@ def plot(exp_dirs: list[Path], labels: list[str], metric: str, output: str | Non
 
         ax.plot(depths, values, marker="o", label=label)
 
-    ax.set_xlabel("Depth")
-    ax.set_ylabel(metric.replace("_", " ").title())
-    ax.set_title(f"{metric.replace('_', ' ').title()} by Depth")
+    ax.set_xlabel("Level")
+    ax.set_ylabel("Accuracy")
+    ax.set_title("Accuracy by Level")
     ax.set_xticks(range(1, 9))
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -65,8 +84,8 @@ def main():
     parser.add_argument(
         "--metric",
         choices=["pass_at_1", "pass_at_n"],
-        default="pass_at_1",
-        help="Which metric to plot (default: pass_at_1)",
+        default="pass_at_n",
+        help="Which metric to plot (default: pass_at_n)",
     )
     parser.add_argument(
         "--labels",

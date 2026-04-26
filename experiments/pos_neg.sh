@@ -1,8 +1,8 @@
 set -e
 set -x
 export HYDRA_FULL_ERROR=1
-NGPUS=8
-VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
+NGPUS=4
+VISIBLE_DEVICES="0,1,2,3"
 
 DATA_DIR=/data/user_data/gyeongwk
 STRING_TASK_PATH=data/string_task
@@ -18,7 +18,7 @@ MODEL_ID="llama-3.1-8b-stage1-rft"
 DATE=$(date +"%m%d_%H%M")
 DATASET_NAME="string-task"
 ROLLOUT_N=16
-EXPERIMENT="REINFORCE+Baseline-${DATASET_NAME}"
+EXPERIMENT="POS+NEG-${DATASET_NAME}"
 ENABLE_TRAIN_TEMP=False
 
 PROJECT_NAME="string-task"
@@ -59,7 +59,6 @@ python3 -m recipe.osft.main_osft \
     trainer.enable_train_temperature=${ENABLE_TRAIN_TEMP} \
     trainer.enable_negative_sample_training=True \
     trainer.negative_sample_loss_scale=1.0 \
-    trainer.reward_baseline="mean" \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT} \
