@@ -231,8 +231,6 @@ def _apply_advantage_weighting(
             variance = sum(a * a for a in advs) / len(advs)
             std = variance ** 0.5
             advs = [a / (std + std_eps) for a in advs]
-        else:
-            advs = [a * 2.0 for a in advs] # Apply scaling factor of 2
 
         for idx, adv in zip(indices, advs):
             advantages[idx] = adv
