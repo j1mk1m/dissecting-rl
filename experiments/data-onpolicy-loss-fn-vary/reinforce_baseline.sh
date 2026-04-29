@@ -52,9 +52,9 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.n=${ROLLOUT_N} \
     actor_rollout_ref.rollout.temperature=1.0 \
-    actor_rollout_ref.rollout.val_kwargs.temperature=1 \
+    actor_rollout_ref.rollout.val_kwargs.temperature=0 \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
-    actor_rollout_ref.rollout.val_kwargs.do_sample=True \
+    actor_rollout_ref.rollout.val_kwargs.do_sample=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     trainer.enable_train_temperature=${ENABLE_TRAIN_TEMP} \
     trainer.enable_negative_sample_training=True \
