@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import glob
-import random
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,20 +43,15 @@ class TrajectoryDataSourceController:
     def __init__(self, cfg: DataSourceConfig, total_training_steps: int):
         self.cfg = cfg
         self.total_training_steps = max(int(total_training_steps), 1)
-        self._rng = random.Random(int(cfg.seed))
 
-        self._bootstrap_batch: DataProto | None = None
-        self._iterative_history: deque[DataProto] = deque(maxlen=max(1, int(cfg.iterative_k)))
+        self._bootstrap_batches: deque[DataProto] = deque()
+        self._iterative_batches: deque[DataProto] = deque()
         self._teacher_batches: list[DataProto] = []
         self._teacher_idx = 0
 
         if self.cfg.mode == "teacher":
-            self._teacher_batches = self._load_teacher_batches(self.cfg.teacher_dataproto_globs)
-            if not self._teacher_batches:
-                raise ValueError(
-                    "trainer.data_source.mode='teacher' requires at least one "
-                    "DataProto file matched by trainer.data_source.teacher_dataproto_globs."
-                )
+            if self.cfg.teacher_dataproto_globs:
+                self._teacher_batches = self._load_teacher_batches(self.cfg.teacher_dataproto_globs)
 
     @classmethod
     def from_omegaconf(cls, cfg, total_training_steps: int) -> "TrajectoryDataSourceController":
@@ -77,10 +71,32 @@ class TrajectoryDataSourceController:
 
     def needs_rollout_generation(self) -> bool:
         if self.cfg.mode == "teacher":
-            return False
+            return len(self._teacher_batches) == 0
         if self.cfg.mode == "bootstrap":
-            return self._bootstrap_batch is None
+            return len(self._bootstrap_batches) == 0
+        if self.cfg.mode == "iterative":
+            return len(self._iterative_batches) == 0
         return True
+
+    @property
+    def mode(self) -> str:
+        return self.cfg.mode
+
+    def set_bootstrap_batches(self, batches: list[DataProto]) -> None:
+        self._bootstrap_batches = deque(_clone_dataproto_to_cpu(batch) for batch in batches)
+
+    def iterative_chunk_size(self) -> int:
+        return int(self.cfg.iterative_k)
+
+    def set_iterative_batches(self, batches: list[DataProto]) -> None:
+        self._iterative_batches = deque(_clone_dataproto_to_cpu(batch) for batch in batches)
+
+    def set_teacher_batches(self, batches: list[DataProto]) -> None:
+        self._teacher_batches = [_clone_dataproto_to_cpu(batch) for batch in batches]
+        self._teacher_idx = 0
+
+    def teacher_pool_size(self) -> int:
+        return len(self._teacher_batches)
 
     def select_training_batch(self, current_on_policy_batch: DataProto | None) -> tuple[DataProto, dict]:
         mode = self.cfg.mode
@@ -88,6 +104,12 @@ class TrajectoryDataSourceController:
         metrics = {"training/data_source_mode_id": mode_id}
 
         if mode == "teacher":
+            if not self._teacher_batches:
+                raise ValueError(
+                    "No teacher trajectories available. Provide DataProto files via "
+                    "trainer.data_source.teacher_dataproto_globs or teacher parquet "
+                    "train_files with a 'responses' column."
+                )
             teacher_batch = self._teacher_batches[self._teacher_idx]
             self._teacher_idx = (self._teacher_idx + 1) % len(self._teacher_batches)
             out = _clone_dataproto_to_cpu(teacher_batch)
@@ -95,43 +117,33 @@ class TrajectoryDataSourceController:
             metrics["training/data_source_teacher_pool_size"] = len(self._teacher_batches)
             return out, metrics
 
-        if current_on_policy_batch is None:
-            raise ValueError(f"current_on_policy_batch must be provided for mode={mode!r}.")
+        if mode == "bootstrap":
+            if not self._bootstrap_batches:
+                raise ValueError(
+                    "No bootstrap trajectories available. Precompute with the base model "
+                    "and call set_bootstrap_batches(...) before training steps."
+                )
+            metrics["training/data_source_is_off_policy"] = 1
+            metrics["training/data_source_cached_batches"] = len(self._bootstrap_batches)
+            out = self._bootstrap_batches.popleft()
+            return out, metrics
 
         if mode == "on_policy":
+            if current_on_policy_batch is None:
+                raise ValueError("current_on_policy_batch must be provided for mode='on_policy'.")
             metrics["training/data_source_is_off_policy"] = 0
             return current_on_policy_batch, metrics
 
-        if self._bootstrap_batch is None:
-            self._bootstrap_batch = _clone_dataproto_to_cpu(current_on_policy_batch)
-
-        if mode == "bootstrap":
-            metrics["training/data_source_is_off_policy"] = 1
-            metrics["training/data_source_cached_batches"] = 1
-            out = _clone_dataproto_to_cpu(self._bootstrap_batch)
-            return out, metrics
-
         # mode == "iterative":
-        self._iterative_history.append(_clone_dataproto_to_cpu(current_on_policy_batch))
-
-        # Boundary condition requested in the design:
-        # - k == 1 => same as Bootstrap
-        # - k >= total_training_steps => equivalent to On-policy
-        if self.cfg.iterative_k == 1:
-            selected = self._bootstrap_batch
-            selected_kind = "bootstrap"
-        elif self.cfg.iterative_k >= self.total_training_steps:
-            selected = current_on_policy_batch
-            selected_kind = "on_policy"
-        else:
-            selected = self._rng.choice(list(self._iterative_history))
-            selected_kind = "iterative_replay"
-
-        metrics["training/data_source_is_off_policy"] = 1 if selected_kind != "on_policy" else 0
-        kind_id = {"bootstrap": 1, "iterative_replay": 2, "on_policy": 0}[selected_kind]
-        metrics["training/data_source_selected_kind_id"] = kind_id
-        metrics["training/data_source_cached_batches"] = len(self._iterative_history)
-        out = _clone_dataproto_to_cpu(selected) if selected is not current_on_policy_batch else selected
+        if not self._iterative_batches:
+            raise ValueError(
+                "No iterative trajectories available. Generate the next k batches from "
+                "the current checkpoint and call set_iterative_batches(...)."
+            )
+        metrics["training/data_source_is_off_policy"] = 1
+        metrics["training/data_source_selected_kind_id"] = 2
+        metrics["training/data_source_cached_batches"] = len(self._iterative_batches)
+        out = self._iterative_batches.popleft()
         return out, metrics
 
     def _load_teacher_batches(self, globs: tuple[str, ...]) -> list[DataProto]:
