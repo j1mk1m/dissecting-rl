@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --partition general
 #SBATCH --time 1-23:00 # set time
-#SBATCH --job-name=test
+#SBATCH --job-name=#NAME
 #SBATCH --chdir=/home/gyeongwk/compositional-generality # working directory
 
 #SBATCH --gres=gpu:4
@@ -17,4 +17,4 @@ source ~/.bashrc
 conda activate compositional
 
 # Run bash script
-
+bash #SCRIPT

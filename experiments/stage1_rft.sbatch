@@ -15,7 +15,6 @@
 #SBATCH --mail-user=j1mk1m.dummy@gmail.com
 
 source ~/.bashrc
-source ~/anaconda3/etc/profile.d/conda.sh
 conda activate rl_comp
 
 export PROJECT_NAME=string-task

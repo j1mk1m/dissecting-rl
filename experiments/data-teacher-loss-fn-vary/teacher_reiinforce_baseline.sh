@@ -1,50 +1,39 @@
 set -e
 set -x
-VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
 export HYDRA_FULL_ERROR=1
-NGPUS=8
-# export WORLD_SIZE=1
-# export RANK=0
-# export LOCAL_RANK=0
+
+VISIBLE_DEVICES="0,1,2,3"
+NGPUS=4
 
 
-ROOT_DIR=$(pwd)
 DATA_DIR=/data/user_data/gyeongwk
-STRING_TASK_PATH=$HOME/RL-Compositionality/data/string_task
-TRAIN_FILE=$STRING_TASK_PATH/stage2_level2/train.parquet
+STRING_TASK_PATH=data/string_task
+TRAIN_FILE="$STRING_TASK_PATH/teacher-rl-checkpoint/rollout.parquet"
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
-# VAL_PREFIX=$ROOT_DIR/data/benchmarks
-# MATH500_PATH=$VAL_PREFIX/math500.parquet
-# MATH500_100_PATH=$VAL_PREFIX/math500_100.parquet
-# AIME_PATH=$VAL_PREFIX/aime.parquet
-# AIME25_PATH=$VAL_PREFIX/aime25.parquet
-# AMC_PATH=$VAL_PREFIX/amc.parquet
-# OLYMPIAD_PATH=$VAL_PREFIX/olympiadbench.parquet
-# MINERVA_PATH=$VAL_PREFIX/minerva.parquet
-
-# VAL_FILE_LIST="['$MATH500_PATH','$AIME25_PATH']"
-
+# Teacher trajectories serialized with DataProto.save_to_disk(...).
+# Update this glob to point at your teacher-generated offline trajectory files.
 
 LR=1e-6
-BACKBONE="stage1-rft"
 BACKBONE_PATH=gyeongwk/stage1-rft
+#BACKBONE_PATH="meta-llama/Llama-3.2-1B-Instruct" #test small model
 MAX_PROMPT_LENGTH=1024
-MAX_GEN_LENGTH=8192
-MODEL_ID="llama-3.1-8b-stage1-rft"
-DATE=$(date +"%m%d_%H%M")
-TASK="OSFT"
-DATASET_NAME="string-task"
+MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
-EXPERIMENT="OSFT-${DATASET_NAME}"
 ENABLE_TRAIN_TEMP=False
 TAU_S=1
 
+# Data source: teacher off-policy trajectories
+DATA_SOURCE="teacher"
+
+# Loss: POS+NEG
+# reward_baseline="none": binary OSFT filter per uid
+# enable_negative_sample_training=True: also train on incorrect samples
+LOSS="TEACHER-POSNEG"
+
 PROJECT_NAME="string-task"
-
-EXP="${TASK}-${MODEL_ID}-${EXPERIMENT}-lr${LR}-TAUS${TAU_S}-rollout${ROLLOUT_N}-ttr${ENABLE_TRAIN_TEMP}"
-OUTPUT_DIR="${DATA_DIR}/checkpoints/${PROJECT_NAME}/${EXP}"
-
+EXPERIMENT="${LOSS}-${BACKBONE_PATH}-rollout${ROLLOUT_N}-TEST"
+OUTPUT_DIR="${DATA_DIR}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
 
 CUDA_VISIBLE_DEVICES=${VISIBLE_DEVICES} \
 python3 -m recipe.osft.main_osft \
@@ -61,6 +50,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
     actor_rollout_ref.actor.optim.lr=${LR} \
+    actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
     actor_rollout_ref.actor.ppo_mini_batch_size=16 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.use_kl_loss=False \
@@ -69,20 +59,25 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.80 \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.n=${ROLLOUT_N} \
     actor_rollout_ref.rollout.temperature=${TAU_S} \
-    actor_rollout_ref.rollout.val_kwargs.temperature=1 \
+    actor_rollout_ref.rollout.val_kwargs.temperature=0 \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
-    actor_rollout_ref.rollout.val_kwargs.do_sample=True \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
+    actor_rollout_ref.rollout.val_kwargs.do_sample=False \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
+    trainer.data_source.mode=${DATA_SOURCE} \
+    trainer.reward_baseline="none" \
+    trainer.enable_negative_sample_training=True \
+    trainer.negative_sample_loss_scale=1.0 \
+    trainer.reward_baseline="mean" \
     trainer.enable_train_temperature=${ENABLE_TRAIN_TEMP} \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
-    trainer.experiment_name=${EXP} \
+    trainer.experiment_name=${EXPERIMENT} \
     trainer.val_before_train=True \
     trainer.default_local_dir=${OUTPUT_DIR} \
-    trainer.n_gpus_per_node=$NGPUS \
+    trainer.n_gpus_per_node=${NGPUS} \
     trainer.default_hdfs_dir=null \
     trainer.nnodes=1 \
     trainer.save_freq=100 \
