@@ -5,34 +5,22 @@ export HYDRA_FULL_ERROR=1
 VISIBLE_DEVICES="0,1,2,3"
 NGPUS=4
 
-
 DATA_DIR=/data/user_data/gyeongwk
 STRING_TASK_PATH=data/string_task
-TRAIN_FILE="$STRING_TASK_PATH/teacher-rl-checkpoint/rollout.parquet"
+TRAIN_FILE="$STRING_TASK_PATH/teacher-rl-checkpoint/rollout.parquet" # teacher trajectories
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
-# Teacher trajectories serialized with DataProto.save_to_disk(...).
-# Update this glob to point at your teacher-generated offline trajectory files.
-
-LR=1e-6
-# BACKBONE_PATH=gyeongwk/stage1-rft
-BACKBONE_PATH="meta-llama/Llama-3.2-1B-Instruct" #test small model
+BACKBONE_PATH=meta-llama/Llama-3.2-1B-Instruct
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
-ENABLE_TRAIN_TEMP=False
-TAU_S=1
 
-# Data source: teacher off-policy trajectories
-DATA_SOURCE="teacher"
+DATA_SOURCE="Teacher"
 
-# Loss: POS+NEG
-# reward_baseline="none": binary OSFT filter per uid
-# enable_negative_sample_training=True: also train on incorrect samples
-LOSS="TEACHER-POSNEG"
+LOSS="POS+NEG"
 
 PROJECT_NAME="string-task"
-EXPERIMENT="${LOSS}-${BACKBONE_PATH}-rollout${ROLLOUT_N}-TEST"
+EXPERIMENT="${DATA_SOURCE}-${LOSS}"
 OUTPUT_DIR="${DATA_DIR}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
 
 CUDA_VISIBLE_DEVICES=${VISIBLE_DEVICES} \
@@ -49,7 +37,6 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
-    actor_rollout_ref.actor.optim.lr=${LR} \
     actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
     actor_rollout_ref.actor.ppo_mini_batch_size=16 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
@@ -61,7 +48,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.80 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.n=${ROLLOUT_N} \
-    actor_rollout_ref.rollout.temperature=${TAU_S} \
+    actor_rollout_ref.rollout.temperature=1.0 \
     actor_rollout_ref.rollout.val_kwargs.temperature=0 \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=False \
@@ -70,7 +57,7 @@ python3 -m recipe.osft.main_osft \
     trainer.reward_baseline="none" \
     trainer.enable_negative_sample_training=True \
     trainer.negative_sample_loss_scale=1.0 \
-    trainer.enable_train_temperature=${ENABLE_TRAIN_TEMP} \
+    trainer.enable_train_temperature=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT} \
