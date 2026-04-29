@@ -128,9 +128,38 @@ class RayOSFTTrainer(RayPPOTrainer):
         batch = batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n, interleave=True)
         batch = batch.union(gen_batch_output)
         batch.batch["response_mask"] = compute_response_mask(batch)
-        return self._apply_reward_processing_and_metrics(batch, metrics)
+        return self._apply_reward_processing_and_metrics(batch, metrics, timing_raw=timing_raw)
 
-    def _apply_reward_processing_and_metrics(self, batch: DataProto, metrics: dict) -> DataProto | None:
+    def _dump_rollout_generations_from_batch(self, batch: DataProto, timing_raw: Optional[dict] = None) -> None:
+        rollout_data_dir = self.config.trainer.get("rollout_data_dir", None)
+        if not rollout_data_dir:
+            return
+
+        dump_timer = _timer("dump_rollout_generations", timing_raw) if timing_raw is not None else nullcontext()
+        with dump_timer:
+            inputs = self.tokenizer.batch_decode(batch.batch["prompts"], skip_special_tokens=True)
+            outputs = self.tokenizer.batch_decode(batch.batch["responses"], skip_special_tokens=True)
+
+            if "token_level_scores" in batch.batch and batch.batch["token_level_scores"] is not None:
+                sequence_score = batch.batch["token_level_scores"].sum(-1)
+                scores = sequence_score.cpu().tolist()
+            else:
+                print("DEBUG dump_rollout_generations: 'token_level_scores' not found.")
+                scores = [0 for _ in range(len(inputs))]
+
+            response_lengths = batch.batch["response_mask"].sum(dim=-1).cpu().tolist()
+
+            self._dump_generations(
+                inputs=inputs,
+                outputs=outputs,
+                scores=scores,
+                reward_extra_infos_dict={"response_lengths": response_lengths},
+                dump_path=rollout_data_dir,
+            )
+
+    def _apply_reward_processing_and_metrics(
+        self, batch: DataProto, metrics: dict, timing_raw: Optional[dict] = None
+    ) -> DataProto | None:
         """Apply reward scoring/filtering and write shared training metrics."""
         if self.config.trainer.enable_train_reward and self.reward_fn is not None:
             reward_tensor = self.reward_fn(batch)
@@ -146,6 +175,9 @@ class RayOSFTTrainer(RayPPOTrainer):
                     "reward/score/min": torch.min(sequence_score).item(),
                 }
             )
+
+            # Log raw rollouts before reward processing filters any samples out.
+            self._dump_rollout_generations_from_batch(batch, timing_raw=timing_raw)
 
             batch, group_metrics = apply_reward_processing(
                 batch,
@@ -452,40 +484,6 @@ class RayOSFTTrainer(RayPPOTrainer):
                         actor_output = self.actor_rollout_wg.update_actor(batch)
                     actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
                     metrics.update(actor_output_metrics)
-
-                    # Log rollout generations if enabled
-                    rollout_data_dir = self.config.trainer.get("rollout_data_dir", None)
-                    if rollout_data_dir:
-                        with _timer("dump_rollout_generations", timing_raw):
-                            # print(batch.batch.keys())
-                            inputs = self.tokenizer.batch_decode(batch.batch["prompts"], skip_special_tokens=True)
-                            outputs = self.tokenizer.batch_decode(batch.batch["responses"], skip_special_tokens=True)
-                            # scores = batch.batch["token_level_scores"].sum(-1).cpu().tolist()
-
-                            # --- Scores and Rewards (from reward_fn) ---
-                            if "token_level_scores" in batch.batch and batch.batch["token_level_scores"] is not None:
-                                sequence_score = batch.batch["token_level_scores"].sum(-1)
-                                scores = sequence_score.cpu().tolist()
-                                #metrics.update(
-                                #    {
-                                #        "reward/score/mean": torch.mean(sequence_score).item(),
-                                #        "reward/score/max": torch.max(sequence_score).item(),
-                                #        "reward/score/min": torch.min(sequence_score).item(),
-                                #    }
-                                #)
-                            else:
-                                print("DEBUG dump_rollout_generations: 'token_level_scores' not found.")
-                                scores = [0 for _ in range(len(inputs))]  # placeholder, since we don't have scores in OSFT
-
-                            response_lengths = batch.batch["response_mask"].sum(dim=-1).cpu().tolist()
-
-                            self._dump_generations(
-                                inputs=inputs,
-                                outputs=outputs,
-                                scores=scores,
-                                reward_extra_infos_dict={"response_lengths": response_lengths},
-                                dump_path=rollout_data_dir,
-                            )
 
                     # validate
                     if self.val_reward_fn is not None and self.config.trainer.test_freq > 0 and (is_last_step or self.global_steps % self.config.trainer.test_freq == 0):
