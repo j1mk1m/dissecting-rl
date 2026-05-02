@@ -1,30 +1,27 @@
 set -e
 set -x
 export HYDRA_FULL_ERROR=1
-NGPUS=4
+
 VISIBLE_DEVICES="0,1,2,3"
+NGPUS=4
 
 DATA_DIR=/data/user_data/gyeongwk
 STRING_TASK_PATH=data/string_task
-TRAIN_FILE=$STRING_TASK_PATH/stage2_level2/train.parquet
+TRAIN_FILE="$STRING_TASK_PATH/teacher-bootstrap/rollout.parquet" # teacher trajectories
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
-LR=1e-6
-BACKBONE="stage1-rft"
 BACKBONE_PATH=gyeongwk/stage1-rft
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
-MODEL_ID="llama-3.1-8b-stage1-rft"
-DATE=$(date +"%m%d_%H%M")
-DATASET_NAME="string-task"
 ROLLOUT_N=16
-EXPERIMENT="On-policy-REINFORCE+Baseline-${DATASET_NAME}"
-ENABLE_TRAIN_TEMP=False
+
+DATA_SOURCE="Bootstrap"
+
+LOSS="REINFORCE+BASELINE"
 
 PROJECT_NAME="string-task"
-
+EXPERIMENT="${DATA_SOURCE}-${LOSS}"
 OUTPUT_DIR="${DATA_DIR}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
-
 
 CUDA_VISIBLE_DEVICES=${VISIBLE_DEVICES} \
 python3 -m recipe.osft.main_osft \
@@ -40,7 +37,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.optim.lr_warmup_steps=5 \
-    actor_rollout_ref.actor.optim.lr=${LR} \
+    actor_rollout_ref.actor.loss_agg_mode=seq-mean-token-sum \
     actor_rollout_ref.actor.ppo_mini_batch_size=16 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.use_kl_loss=False \
@@ -56,16 +53,18 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
-    trainer.enable_train_temperature=${ENABLE_TRAIN_TEMP} \
+    trainer.data_source.mode=${DATA_SOURCE} \
+    trainer.reward_baseline="none" \
     trainer.enable_negative_sample_training=True \
     trainer.negative_sample_loss_scale=1.0 \
     trainer.reward_baseline="mean" \
+    trainer.enable_train_temperature=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT} \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     trainer.default_local_dir=${OUTPUT_DIR} \
-    trainer.n_gpus_per_node=$NGPUS \
+    trainer.n_gpus_per_node=${NGPUS} \
     trainer.default_hdfs_dir=null \
     trainer.nnodes=1 \
     trainer.save_freq=100 \

@@ -13,7 +13,7 @@
 #SBATCH --mail-user=j1mk1m.dummy@gmail.com
 
 source ~/.bashrc
-conda activate compositional
+conda activate osft
 
 # Run bash script
 bash #SCRIPT

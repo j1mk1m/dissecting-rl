@@ -5,7 +5,7 @@ NGPUS=4
 VISIBLE_DEVICES="0,1,2,3"
 
 DATA_DIR=/data/user_data/gyeongwk
-STRING_TASK_PATH=data/string_task
+STRING_TASK_PATH=$HOME/RL-Compositionality/data/string_task
 TRAIN_FILE=$STRING_TASK_PATH/stage2_level2/train.parquet
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
@@ -13,12 +13,13 @@ LR=1e-6
 BACKBONE="stage1-rft"
 BACKBONE_PATH=gyeongwk/stage1-rft
 MAX_PROMPT_LENGTH=1024
-MAX_GEN_LENGTH=4096
+MAX_GEN_LENGTH=8192
 MODEL_ID="llama-3.1-8b-stage1-rft"
 DATE=$(date +"%m%d_%H%M")
+TASK="GRPO"
 DATASET_NAME="string-task"
 ROLLOUT_N=16
-EXPERIMENT="POS+NEG-${DATASET_NAME}"
+EXPERIMENT="On-policy-GRPO-${DATASET_NAME}"
 ENABLE_TRAIN_TEMP=False
 
 PROJECT_NAME="string-task"
@@ -59,6 +60,9 @@ python3 -m recipe.osft.main_osft \
     trainer.enable_train_temperature=${ENABLE_TRAIN_TEMP} \
     trainer.enable_negative_sample_training=True \
     trainer.negative_sample_loss_scale=1.0 \
+    trainer.reward_baseline="mean" \
+    trainer.reward_normalize_std=True \
+    trainer.reward_std_eps=1e-8 \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT} \

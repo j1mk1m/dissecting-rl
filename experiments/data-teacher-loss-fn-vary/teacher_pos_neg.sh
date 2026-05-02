@@ -12,7 +12,7 @@ VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
 BACKBONE_PATH=gyeongwk/stage1-rft
 MAX_PROMPT_LENGTH=1024
-MAX_GEN_LENGTH=4096
+MAX_GEN_LENGTH=8192
 ROLLOUT_N=16
 
 DATA_SOURCE="Teacher"
@@ -61,7 +61,7 @@ python3 -m recipe.osft.main_osft \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT} \
-    trainer.val_before_train=True \
+    trainer.val_before_train=False \
     trainer.default_local_dir=${OUTPUT_DIR} \
     trainer.n_gpus_per_node=${NGPUS} \
     trainer.default_hdfs_dir=null \

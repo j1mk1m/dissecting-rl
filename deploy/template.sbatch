@@ -5,7 +5,7 @@
 #SBATCH --chdir=/home/gyeongwk/compositional-generality # working directory
 
 #SBATCH --gres=gpu:4
-#SBATCH --mem=256GB
+#SBATCH --mem=500GB
 #SBATCH --cpus-per-task=8 # cpus
 
 #SBATCH --output=logs/%x-%j.out # output log
@@ -14,7 +14,7 @@
 #SBATCH --mail-user=j1mk1m.dummy@gmail.com
 
 source ~/.bashrc
-conda activate compositional
+conda activate osft
 
 # Run bash script
 bash #SCRIPT
