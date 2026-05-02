@@ -5,7 +5,7 @@ export HYDRA_FULL_ERROR=1
 VISIBLE_DEVICES="0,1,2,3"
 NGPUS=4
 
-DATA_DIR=/data/user_data/gyeongwk
+AFS_PATH=${AFS_PATH:-.}
 STRING_TASK_PATH=data/string_task
 TRAIN_FILE="$STRING_TASK_PATH/teacher-bootstrap/rollout.parquet" # teacher trajectories
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
@@ -21,7 +21,7 @@ LOSS="POS+NEG"
 
 PROJECT_NAME="string-task"
 EXPERIMENT="${DATA_SOURCE}-${LOSS}"
-OUTPUT_DIR="${DATA_DIR}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
+OUTPUT_DIR="${AFS_PATH}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
 
 CUDA_VISIBLE_DEVICES=${VISIBLE_DEVICES} \
 python3 -m recipe.osft.main_osft \
