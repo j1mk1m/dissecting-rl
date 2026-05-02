@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -25,13 +26,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def resolve_existing_file(path: Path, label: str) -> Path:
-    resolved = path.expanduser().resolve()
-    if not resolved.is_file():
-        raise FileNotFoundError(f"{label} does not exist or is not a file: {resolved}")
-    return resolved
-
-
 def render_template(template_text: str, job_name: str, script_path: Path) -> str:
     return (
         template_text.replace("#NAME", job_name).replace("#SCRIPT", str(script_path))
@@ -40,8 +34,12 @@ def render_template(template_text: str, job_name: str, script_path: Path) -> str
 
 def main() -> None:
     args = parse_args()
-    template_path = resolve_existing_file(args.template, "Template path")
-    script_path = resolve_existing_file(args.script_path, "Script path")
+    if not os.path.exists(args.template):
+        raise FileNotFoundError(f"Template not found: {args.template}")
+    if not os.path.exists(args.script_path):
+        raise FileNotFoundError(f"Script not found: {args.script_path}")
+    template_path = args.template
+    script_path = args.script_path
     job_name = script_path.stem
 
     template_text = template_path.read_text(encoding="utf-8")

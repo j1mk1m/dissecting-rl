@@ -4,27 +4,21 @@ export HYDRA_FULL_ERROR=1
 NGPUS=4
 VISIBLE_DEVICES="0,1,2,3"
 
-DATA_DIR=/data/user_data/gyeongwk
-STRING_TASK_PATH=$HOME/RL-Compositionality/data/string_task
+AFS_PATH=${AFS_PATH:-.}
+STRING_TASK_PATH=data/string_task
 TRAIN_FILE=$STRING_TASK_PATH/stage2_level2/train.parquet
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
 LR=1e-6
-BACKBONE="stage1-rft"
 BACKBONE_PATH=gyeongwk/stage1-rft
 MAX_PROMPT_LENGTH=1024
-MAX_GEN_LENGTH=8192
-MODEL_ID="llama-3.1-8b-stage1-rft"
-DATE=$(date +"%m%d_%H%M")
-TASK="GRPO"
-DATASET_NAME="string-task"
+MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
-EXPERIMENT="On-policy-GRPO-${DATASET_NAME}"
-ENABLE_TRAIN_TEMP=False
+EXPERIMENT="On-policy-GRPO"
 
 PROJECT_NAME="string-task"
 
-OUTPUT_DIR="${DATA_DIR}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
+OUTPUT_DIR="${AFS_PATH}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
 
 
 CUDA_VISIBLE_DEVICES=${VISIBLE_DEVICES} \
@@ -57,7 +51,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
-    trainer.enable_train_temperature=${ENABLE_TRAIN_TEMP} \
+    trainer.enable_train_temperature=False \
     trainer.enable_negative_sample_training=True \
     trainer.negative_sample_loss_scale=1.0 \
     trainer.reward_baseline="mean" \
