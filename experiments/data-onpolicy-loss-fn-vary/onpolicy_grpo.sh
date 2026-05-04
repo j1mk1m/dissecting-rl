@@ -68,6 +68,6 @@ python3 -m recipe.osft.main_osft \
     trainer.save_freq=100 \
     trainer.rollout_data_dir=${OUTPUT_DIR}/rollout_data \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
-    trainer.test_freq=25 \
+    trainer.test_freq=50 \
     +trainer.log_freq=1 \
     trainer.total_epochs=1

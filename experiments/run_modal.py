@@ -67,7 +67,7 @@ def _validate_script_path(script_path: str) -> str:
     gpu=os.environ.get("MODAL_GPU", "A100-80GB:4"),
     cpu=16,
     memory=65536,
-    timeout=24 * 60 * 60,
+    timeout=86400,
     secrets=[modal.Secret.from_name("wandb-secret")],
     volumes={
         "/root/compositional-generality/checkpoints": CHECKPOINTS_VOLUME,
