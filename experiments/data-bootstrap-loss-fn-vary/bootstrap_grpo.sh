@@ -2,13 +2,13 @@ set -e
 set -x
 export HYDRA_FULL_ERROR=1
 
-VISIBLE_DEVICES="0,1,2,3"
+VISIBLE_DEVICES=$SLURM_JOB_GPUS
 NGPUS=4
 
 
 AFS_PATH=${AFS_PATH:-.}
 STRING_TASK_PATH=data/string_task
-TRAIN_FILE="$STRING_TASK_PATH/teacher-boostrap/rollout.parquet" # teacher trajectories
+TRAIN_FILE="$STRING_TASK_PATH/teacher-bootstrap/rollout.parquet" # teacher trajectories
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
 BACKBONE_PATH=gyeongwk/stage1-rft
@@ -16,7 +16,7 @@ MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
 
-DATA_SOURCE="Bootstrap"
+DATA_SOURCE="Teacher"
 
 LOSS="GRPO"
 
@@ -72,6 +72,6 @@ python3 -m recipe.osft.main_osft \
     trainer.save_freq=100 \
     trainer.rollout_data_dir=${OUTPUT_DIR}/rollout_data \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
-    trainer.test_freq=25 \
+    trainer.test_freq=100 \
     +trainer.log_freq=1 \
     trainer.total_epochs=1

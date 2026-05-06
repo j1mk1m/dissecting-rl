@@ -15,9 +15,9 @@ MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
 
-DATA_SOURCE="Bootstrap"
+DATA_SOURCE="Teacher"
 
-LOSS="POS+NEG"
+LOSS="GRPO"
 
 PROJECT_NAME="string-task"
 EXPERIMENT="${DATA_SOURCE}-${LOSS}"
@@ -54,9 +54,10 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.val_kwargs.do_sample=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     trainer.data_source.mode=${DATA_SOURCE} \
-    trainer.reward_baseline="none" \
     trainer.enable_negative_sample_training=True \
     trainer.negative_sample_loss_scale=1.0 \
+    trainer.reward_baseline="mean" \
+    trainer.reward_normalize_std=True \
     trainer.enable_train_temperature=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
@@ -69,6 +70,6 @@ python3 -m recipe.osft.main_osft \
     trainer.save_freq=100 \
     trainer.rollout_data_dir=${OUTPUT_DIR}/rollout_data \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
-    trainer.test_freq=25 \
+    trainer.test_freq=100 \
     +trainer.log_freq=1 \
     trainer.total_epochs=1

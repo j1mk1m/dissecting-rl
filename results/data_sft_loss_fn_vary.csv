@@ -1,0 +1,5 @@
+Data,Loss Function,Name,Level 1,Level 2,Level 3,Level 4,Level 5,Level 6,Level 7,Level 8,wandb,priority
+On-policy,SFT,On-policy SFT,0.69140625,0.28515625,0.06640625,0.02734375,0.01171875,0,0,0,,
+Teacher,SFT,Teacher SFT,0.7578125,0.421875,0.13671875,0.03125,0,0,0,0,,
+Bootstrap,SFT,Bootstrap SFT,0.7421875,0.2421875,0.05859375,0.02734375,0.01171875,0,0,0,,
+,SFT,Base,0.74609375,0.125,0.0234375,0.0078125,0.00390625,0,0,0,,
