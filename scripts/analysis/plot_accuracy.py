@@ -1,24 +1,32 @@
-"""Plot pass@1 and/or pass@n accuracy by depth across multiple experiments.
+"""Plot accuracy by level from a CSV results file.
 
 Usage:
-    python scripts/plot_accuracy.py eval/exp1 eval/exp2 [--metric pass_at_1] [--output plot.png]
+    # Plot all rows
+    python scripts/analysis/plot_accuracy.py results/main.csv
 
-Each positional argument should be a directory containing accuracy.json.
-The experiment label defaults to the directory name; override with --labels.
+    # Filter to a specific data group
+    python scripts/analysis/plot_accuracy.py results/main.csv --data On-policy
+    python scripts/analysis/plot_accuracy.py results/main.csv --data Bootstrap
+
+    # Save to file
+    python scripts/analysis/plot_accuracy.py results/main.csv --output plot.png
+
+CSV format expected:
+    Data, Loss Function, Level 1, Level 2, ..., Level 8, ...
 """
 
 import argparse
-import json
-import re
+import csv
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-BASE_FONT_SIZE = 12
+BASE_FONT_SIZE = 14
+
+LEVEL_COLUMNS = [f"Level {i}" for i in range(1, 9)]
 
 
 def configure_plot_style():
-    """Apply consistent, larger font sizes to all plot text."""
     plt.rcParams.update(
         {
             "font.size": BASE_FONT_SIZE,
@@ -30,42 +38,52 @@ def configure_plot_style():
             "figure.titlesize": BASE_FONT_SIZE + 3,
         }
     )
-    pass
 
 
-def load_accuracy(path: Path) -> dict[int, dict]:
-    """Return {depth: {pass_at_1: float, pass_at_n: float}} from accuracy.json."""
-    with open(path) as f:
-        data = json.load(f)
+def load_csv(path: Path, data_group: str | None) -> list[dict]:
+    """Return rows (optionally filtered by data_group) as list of {label, levels, values}."""
+    rows = []
+    with open(path, newline="") as f:
+        reader = csv.DictReader(f)
+        headers = reader.fieldnames or []
+        has_name_col = "Name" in headers
+        for row in reader:
+            if data_group is not None and row["Data"].strip() != data_group:
+                continue
+            if has_name_col and row.get("Name", "").strip():
+                label = row["Name"].strip()
+            elif data_group is None:
+                label = f"{row['Data'].strip()} - {row['Loss Function'].strip()}"
+            else:
+                label = row["Loss Function"].strip()
+            levels, values = [], []
+            for col in LEVEL_COLUMNS:
+                val = row.get(col, "").strip()
+                if val != "":
+                    levels.append(int(col.split()[1]))
+                    values.append(float(val))
+            if levels:
+                rows.append({"label": label, "levels": levels, "values": values})
+    return rows
 
-    by_depth = {}
-    for key, vals in data.get("by_data_source", {}).items():
-        m = re.search(r"depth(\d+)", key)
-        if m:
-            depth = int(m.group(1))
-            by_depth[depth] = vals
-    return by_depth
 
-
-def plot(exp_dirs: list[Path], labels: list[str], metric: str, output: str | None):
+def plot(csv_path: Path, data_group: str | None, output: str | None):
     configure_plot_style()
+    rows = load_csv(csv_path, data_group)
+
+    if not rows:
+        msg = f"data group '{data_group}'" if data_group else "any rows"
+        print(f"No rows found for {msg} in {csv_path}")
+        return
+
     fig, ax = plt.subplots(figsize=(8, 5))
-
-    for exp_dir, label in zip(exp_dirs, labels):
-        accuracy_path = exp_dir / "accuracy.json"
-        if not accuracy_path.exists():
-            print(f"Warning: {accuracy_path} not found, skipping.")
-            continue
-
-        by_depth = load_accuracy(accuracy_path)
-        depths = sorted(by_depth)
-        values = [by_depth[d][metric] for d in depths]
-
-        ax.plot(depths, values, marker="o", label=label)
+    for row in rows:
+        ax.plot(row["levels"], row["values"], marker="o", label=row["label"])
 
     ax.set_xlabel("Level")
     ax.set_ylabel("Accuracy")
-    ax.set_title("Accuracy by Level")
+    title = f"Accuracy by Level — {data_group}" if data_group else "Accuracy by Level"
+    ax.set_title(title)
     ax.set_xticks(range(1, 9))
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -79,27 +97,17 @@ def plot(exp_dirs: list[Path], labels: list[str], metric: str, output: str | Non
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Plot accuracy by depth across experiments.")
-    parser.add_argument("experiments", nargs="+", type=Path, help="Experiment directories containing accuracy.json")
+    parser = argparse.ArgumentParser(description="Plot accuracy by level from a CSV results file.")
+    parser.add_argument("csv", type=Path, help="Path to results CSV file")
     parser.add_argument(
-        "--metric",
-        choices=["pass_at_1", "pass_at_n"],
-        default="pass_at_n",
-        help="Which metric to plot (default: pass_at_n)",
-    )
-    parser.add_argument(
-        "--labels",
-        nargs="+",
-        help="Display labels for each experiment (defaults to directory name)",
+        "--data",
+        default=None,
+        help="Filter to a specific data group (e.g. On-policy, Bootstrap). Omit to plot all rows.",
     )
     parser.add_argument("--output", "-o", help="Save figure to this path instead of showing it")
     args = parser.parse_args()
 
-    if args.labels and len(args.labels) != len(args.experiments):
-        parser.error("--labels must have the same number of entries as experiments")
-
-    labels = args.labels if args.labels else [p.name for p in args.experiments]
-    plot(args.experiments, labels, args.metric, args.output)
+    plot(args.csv, args.data, args.output)
 
 
 if __name__ == "__main__":
