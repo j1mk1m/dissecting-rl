@@ -7,7 +7,7 @@ NGPUS=4
 
 AFS_PATH=${AFS_PATH:-.}
 STRING_TASK_PATH=data/string_task
-TRAIN_FILE="$STRING_TASK_PATH/teacher-rl-checkpoint/rollout.parquet" # teacher trajectories
+TRAIN_FILE="$STRING_TASK_PATH/teacher-grpo/rollout.parquet" # teacher trajectories
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
 BACKBONE_PATH=gyeongwk/stage1-rft

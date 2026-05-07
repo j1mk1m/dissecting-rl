@@ -42,13 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-path",
         default=None,
-        help="Path to checkpoint file. Defaults to <output-path>.checkpoint.json",
-    )
-    parser.add_argument(
-        "--checkpoint-interval",
-        type=int,
-        default=100,
-        help="Save a checkpoint every N completed items (default: 100).",
+        help="Path to JSONL checkpoint file. Defaults to <output-path>.checkpoint.jsonl",
     )
     parser.add_argument(
         "--no-resume",
@@ -139,54 +133,49 @@ def generate_one(
 
 
 class CheckpointManager:
-    """Thread-safe periodic checkpoint saver."""
+    """Thread-safe append-only JSONL checkpoint. Each record is one line."""
 
-    def __init__(self, path: str, interval: int, total: int) -> None:
+    def __init__(self, path: str, total: int) -> None:
         self.path = path
-        self.interval = interval
         self.total = total
         self._lock = threading.Lock()
         self._responses: dict[int, list[str]] = {}
         self._errors: list[tuple[int, str]] = []
-        self._completed_since_save = 0
+        self._fh: object = None
 
     def load(self) -> dict[int, list[str]]:
         if not os.path.exists(self.path):
             return {}
         with open(self.path) as f:
-            data = json.load(f)
-        responses = {int(k): v for k, v in data.get("responses", {}).items()}
-        self._responses = responses
-        self._errors = data.get("errors", [])
-        print(f"Resumed from checkpoint: {len(responses)}/{self.total} already done ({self.path})")
-        return responses
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                entry = json.loads(line)
+                if "responses" in entry:
+                    self._responses[entry["idx"]] = entry["responses"]
+                else:
+                    self._errors.append((entry["idx"], entry["error"]))
+        print(f"Resumed from checkpoint: {len(self._responses)}/{self.total} already done ({self.path})")
+        return dict(self._responses)
 
     def record(self, idx: int, result: list[str] | None, error: str | None) -> None:
         with self._lock:
             if result is not None:
                 self._responses[idx] = result
-            elif error is not None:
+                entry = {"idx": idx, "responses": result}
+            else:
                 self._errors.append((idx, error))
-            self._completed_since_save += 1
-            if self._completed_since_save >= self.interval:
-                self._save_locked()
-                self._completed_since_save = 0
+                entry = {"idx": idx, "error": error}
+            if self._fh is None:
+                self._fh = open(self.path, "a")
+            self._fh.write(json.dumps(entry) + "\n")
+            self._fh.flush()
 
     def save(self) -> None:
         with self._lock:
-            self._save_locked()
-
-    def _save_locked(self) -> None:
-        tmp_path = self.path + ".tmp"
-        data = {
-            "responses": {str(k): v for k, v in self._responses.items()},
-            "errors": self._errors,
-            "completed": len(self._responses),
-            "total": self.total,
-        }
-        with open(tmp_path, "w") as f:
-            json.dump(data, f)
-        os.replace(tmp_path, self.path)
+            if self._fh is not None:
+                self._fh.flush()
 
     def responses(self) -> dict[int, list[str]]:
         with self._lock:
@@ -197,6 +186,10 @@ class CheckpointManager:
             return list(self._errors)
 
     def delete(self) -> None:
+        with self._lock:
+            if self._fh is not None:
+                self._fh.close()
+                self._fh = None
         if os.path.exists(self.path):
             os.remove(self.path)
 
@@ -210,7 +203,7 @@ def main() -> None:
     if args.temperature == 0.0 and args.n_samples > 1:
         raise ValueError("For deterministic decoding (--temperature 0), set --n-samples=1.")
 
-    checkpoint_path = args.checkpoint_path or (args.output_path + ".checkpoint.json")
+    checkpoint_path = args.checkpoint_path or (args.output_path + ".checkpoint.jsonl")
 
     stop = parse_stop(args.stop)
     model = resolve_model_name(args.server_url, args.model, args.timeout)
@@ -221,7 +214,7 @@ def main() -> None:
     total = len(prompts)
     print(f"Loaded {total} prompts from {args.data_path}")
 
-    ckpt = CheckpointManager(checkpoint_path, args.checkpoint_interval, total)
+    ckpt = CheckpointManager(checkpoint_path, total)
 
     already_done: dict[int, list[str]] = {}
     if not args.no_resume:

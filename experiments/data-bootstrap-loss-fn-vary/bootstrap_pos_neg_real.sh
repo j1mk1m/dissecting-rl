@@ -17,7 +17,7 @@ ROLLOUT_N=16
 
 DATA_SOURCE="Teacher"
 
-LOSS="GRPO"
+LOSS="POS+NEG"
 
 PROJECT_NAME="string-task"
 EXPERIMENT="Bootstrap-${LOSS}"
@@ -56,8 +56,6 @@ python3 -m recipe.osft.main_osft \
     trainer.data_source.mode=${DATA_SOURCE} \
     trainer.enable_negative_sample_training=True \
     trainer.negative_sample_loss_scale=1.0 \
-    trainer.reward_baseline="mean" \
-    trainer.reward_normalize_std=True \
     trainer.enable_train_temperature=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
