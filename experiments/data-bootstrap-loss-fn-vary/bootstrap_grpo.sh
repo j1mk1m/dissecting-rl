@@ -2,7 +2,7 @@ set -e
 set -x
 export HYDRA_FULL_ERROR=1
 
-VISIBLE_DEVICES=$SLURM_JOB_GPUS
+VISIBLE_DEVICES="0,1,2,3"
 NGPUS=4
 
 
@@ -29,7 +29,7 @@ python3 -m recipe.osft.main_osft \
     data.train_files=$TRAIN_FILE \
     data.val_files=$VAL_FILE \
     data.train_batch_size=16 \
-    data.filter_overlong_prompts=True \
+    data.filter_overlong_prompts=False \
     data.max_prompt_length=${MAX_PROMPT_LENGTH} \
     data.max_response_length=${MAX_GEN_LENGTH} \
     actor_rollout_ref.model.path=${BACKBONE_PATH} \
@@ -69,7 +69,7 @@ python3 -m recipe.osft.main_osft \
     trainer.n_gpus_per_node=${NGPUS} \
     trainer.default_hdfs_dir=null \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=300 \
     trainer.rollout_data_dir=${OUTPUT_DIR}/rollout_data \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
     trainer.test_freq=100 \

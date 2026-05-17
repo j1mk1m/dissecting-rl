@@ -69,7 +69,7 @@ python3 -m recipe.osft.main_osft \
     trainer.n_gpus_per_node=${NGPUS} \
     trainer.default_hdfs_dir=null \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=300 \
     trainer.rollout_data_dir=${OUTPUT_DIR}/rollout_data \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
     trainer.test_freq=100 \

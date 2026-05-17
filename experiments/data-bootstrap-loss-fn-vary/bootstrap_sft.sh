@@ -17,7 +17,7 @@ ROLLOUT_N=16
 
 DATA_SOURCE="Teacher"
 
-LOSS="REINFORCE+BASELINE"
+LOSS="SFT"
 
 PROJECT_NAME="string-task"
 EXPERIMENT="Bootstrap-${LOSS}"
@@ -28,7 +28,7 @@ python3 -m recipe.osft.main_osft \
     data.train_files=$TRAIN_FILE \
     data.val_files=$VAL_FILE \
     data.train_batch_size=16 \
-    data.filter_overlong_prompts=True \
+    data.filter_overlong_prompts=False \
     data.max_prompt_length=${MAX_PROMPT_LENGTH} \
     data.max_response_length=${MAX_GEN_LENGTH} \
     actor_rollout_ref.model.path=${BACKBONE_PATH} \
@@ -54,9 +54,6 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.val_kwargs.do_sample=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     trainer.data_source.mode=${DATA_SOURCE} \
-    trainer.reward_baseline="mean" \
-    trainer.enable_negative_sample_training=True \
-    trainer.negative_sample_loss_scale=1.0 \
     trainer.enable_train_temperature=False \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
@@ -66,7 +63,7 @@ python3 -m recipe.osft.main_osft \
     trainer.n_gpus_per_node=${NGPUS} \
     trainer.default_hdfs_dir=null \
     trainer.nnodes=1 \
-    trainer.save_freq=100 \
+    trainer.save_freq=300 \
     trainer.rollout_data_dir=${OUTPUT_DIR}/rollout_data \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
     trainer.test_freq=100 \
