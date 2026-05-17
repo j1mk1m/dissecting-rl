@@ -350,11 +350,11 @@ class RayOSFTTrainer(RayPPOTrainer):
                 raise ValueError("Bootstrap mode produced zero trainable batches from the training dataset.")
             data_source_controller.set_bootstrap_batches(bootstrap_batches)
             if self.total_training_steps != len(bootstrap_batches):
-                raise ValueError(
-                    "Bootstrap mode requires one-pass training over pre-generated data. "
-                    f"Set total_training_steps to exactly {len(bootstrap_batches)} "
-                    f"(current: {self.total_training_steps}) to avoid replay or partial usage."
+                print(
+                    f"[bootstrap] Adjusting total_training_steps from {self.total_training_steps} "
+                    f"to {len(bootstrap_batches)} to match filtered batch count."
                 )
+                self.total_training_steps = len(bootstrap_batches)
             precomputed_steps = len(bootstrap_batches)
             print(f"[bootstrap] Prepared {len(bootstrap_batches)} off-policy batches from base-model trajectories.")
         if teacher_mode and data_source_controller.needs_rollout_generation():
@@ -374,11 +374,11 @@ class RayOSFTTrainer(RayPPOTrainer):
                 )
             data_source_controller.set_teacher_batches(teacher_batches)
             if self.total_training_steps != len(teacher_batches):
-                raise ValueError(
-                    "Teacher mode expects one-pass training over teacher trajectories. "
-                    f"Set total_training_steps to exactly {len(teacher_batches)} "
-                    f"(current: {self.total_training_steps})."
+                print(
+                    f"[teacher] Adjusting total_training_steps from {self.total_training_steps} "
+                    f"to {len(teacher_batches)} to match filtered batch count."
                 )
+                self.total_training_steps = len(teacher_batches)
             precomputed_steps = len(teacher_batches)
             print(f"[teacher] Prepared {len(teacher_batches)} teacher off-policy batches.")
         elif teacher_mode:
@@ -386,11 +386,11 @@ class RayOSFTTrainer(RayPPOTrainer):
             if precomputed_steps <= 0:
                 raise ValueError("Teacher mode has no available batches.")
             if self.total_training_steps != precomputed_steps:
-                raise ValueError(
-                    "Teacher mode expects one-pass training over teacher trajectories. "
-                    f"Set total_training_steps to exactly {precomputed_steps} "
-                    f"(current: {self.total_training_steps})."
+                print(
+                    f"[teacher] Adjusting total_training_steps from {self.total_training_steps} "
+                    f"to {precomputed_steps} to match preloaded teacher pool size."
                 )
+                self.total_training_steps = precomputed_steps
 
         # add tqdm
         progress_bar = tqdm(total=self.total_training_steps, initial=self.global_steps, desc="Training Progress")

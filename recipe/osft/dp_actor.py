@@ -108,7 +108,7 @@ class OSFTDataParallelPPOActor(DataParallelPPOActor):
                     # we should use log_prob to calculate the cross entropy loss
                     entropy, log_prob = self._forward_micro_batch(micro_batch=data, temperature=temperature, calculate_entropy=calculate_entropy)
 
-                    weight_1d = data.get(SAMPLE_WEIGHT_KEY)
+                    weight_1d = data.get(SAMPLE_WEIGHT_KEY, default=None)
                     if weight_1d is None:
                         weight_1d = torch.ones(log_prob.size(0), device=log_prob.device, dtype=log_prob.dtype)
                     else:
