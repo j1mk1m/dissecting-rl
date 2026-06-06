@@ -14,6 +14,7 @@ BACKBONE_PATH=gyeongwk/stage1-rft
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
+TOTAL_TRAINING_STEPS=1200
 EXPERIMENT="On-policy-POS+NEG"
 
 PROJECT_NAME="string-task"
@@ -67,4 +68,5 @@ python3 -m recipe.osft.main_osft \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
     trainer.test_freq=100 \
     +trainer.log_freq=1 \
+    trainer.total_training_steps=${TOTAL_TRAINING_STEPS} \
     trainer.total_epochs=1
