@@ -26,6 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--server-url", default="http://127.0.0.1:8000", help="vLLM OpenAI server base URL.")
     parser.add_argument("--model", default=None, help="Model name in server. Auto-detected if omitted.")
     parser.add_argument("--n-samples", type=int, default=1, help="Number of samples per prompt.")
+    parser.add_argument("--batch-n", type=int, default=None, help="Max samples per HTTP request. n-samples is split into ceil(n-samples/batch-n) calls and results are merged. Defaults to n-samples (single request).")
     parser.add_argument("--temperature", type=float, default=0.0, help="Sampling temperature.")
     parser.add_argument("--top-p", type=float, default=1.0, help="Sampling top-p.")
     parser.add_argument("--max-tokens", type=int, default=512, help="Max generated tokens per sample.")
@@ -96,16 +97,18 @@ def parse_stop(stop_raw: str | None) -> str | list[str] | None:
     return stop_raw
 
 
-def generate_one(
-    prompt: Any,
+def _request_n(
+    url: str,
+    messages: list[dict],
+    n: int,
     model: str,
     args: argparse.Namespace,
     stop: str | list[str] | None,
 ) -> list[str]:
     payload = {
         "model": model,
-        "messages": normalize_messages(prompt),
-        "n": args.n_samples,
+        "messages": messages,
+        "n": n,
         "temperature": args.temperature,
         "top_p": args.top_p,
         "max_tokens": args.max_tokens,
@@ -113,15 +116,14 @@ def generate_one(
     if stop is not None:
         payload["stop"] = stop
 
-    url = f"{args.server_url.rstrip('/')}/v1/chat/completions"
     last_error: Exception | None = None
     for attempt in range(1, args.max_retries + 1):
         try:
             result = _http_json(url, payload=payload, timeout=args.timeout)
             choices = result.get("choices", [])
             texts = [choice["message"]["content"] for choice in choices]
-            if len(texts) != args.n_samples:
-                raise RuntimeError(f"Expected {args.n_samples} samples, got {len(texts)}.")
+            if len(texts) != n:
+                raise RuntimeError(f"Expected {n} samples, got {len(texts)}.")
             return texts
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, RuntimeError, KeyError, json.JSONDecodeError) as exc:
             last_error = exc
@@ -130,6 +132,25 @@ def generate_one(
             sleep_seconds = args.retry_backoff ** (attempt - 1)
             time.sleep(sleep_seconds)
     raise RuntimeError(f"Failed after {args.max_retries} attempts: {last_error}") from last_error
+
+
+def generate_one(
+    prompt: Any,
+    model: str,
+    args: argparse.Namespace,
+    stop: str | list[str] | None,
+) -> list[str]:
+    url = f"{args.server_url.rstrip('/')}/v1/chat/completions"
+    messages = normalize_messages(prompt)
+    batch_n = args.batch_n if args.batch_n is not None else args.n_samples
+
+    results: list[str] = []
+    remaining = args.n_samples
+    while remaining > 0:
+        n = min(batch_n, remaining)
+        results.extend(_request_n(url, messages, n, model, args, stop))
+        remaining -= n
+    return results
 
 
 class CheckpointManager:
