@@ -15,7 +15,7 @@ BACKBONE_PATH=gyeongwk/stage1-rft
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=8192
 ROLLOUT_N=16
-EXPERIMENT="math-onpolicy-GRPO"
+EXPERIMENT="math-onpolicy-SFT"
 
 PROJECT_NAME="math-task"
 
@@ -54,9 +54,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     trainer.enable_train_temperature=False \
     trainer.enable_negative_sample_training=True \
-    trainer.negative_sample_loss_scale=1.0 \
     trainer.reward_baseline="mean" \
-    trainer.reward_normalize_std=True \
     trainer.reward_std_eps=1e-8 \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
