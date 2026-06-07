@@ -1,23 +1,23 @@
 set -e
 set -x
 export HYDRA_FULL_ERROR=1
+export VLLM_USE_V1=0
 NGPUS=4
 VISIBLE_DEVICES="0,1,2,3"
 
 AFS_PATH=${AFS_PATH:-.}
-STRING_TASK_PATH=data/string_task
-TRAIN_FILE=$STRING_TASK_PATH/stage2_level2/train.parquet
-VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
+MATH_DATA_PATH=data/math
+TRAIN_FILE=$MATH_DATA_PATH/math-easy/train.parquet
+VAL_FILE=$MATH_DATA_PATH/math-medhard/train.parquet
 
 LR=1e-6
 BACKBONE_PATH=gyeongwk/stage1-rft
 MAX_PROMPT_LENGTH=1024
-MAX_GEN_LENGTH=4096
+MAX_GEN_LENGTH=8192
 ROLLOUT_N=16
-TOTAL_TRAINING_STEPS=1200
-EXPERIMENT="On-policy-POS+NEG"
+EXPERIMENT="math-onpolicy-SFT"
 
-PROJECT_NAME="string-task"
+PROJECT_NAME="math-task"
 
 OUTPUT_DIR="${AFS_PATH}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
 
@@ -44,7 +44,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.80 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.65 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.rollout.n=${ROLLOUT_N} \
     actor_rollout_ref.rollout.temperature=1.0 \
@@ -54,7 +54,8 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     trainer.enable_train_temperature=False \
     trainer.enable_negative_sample_training=True \
-    trainer.negative_sample_loss_scale=1.0 \
+    trainer.reward_baseline="mean" \
+    trainer.reward_std_eps=1e-8 \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
     trainer.experiment_name=${EXPERIMENT} \
@@ -63,10 +64,9 @@ python3 -m recipe.osft.main_osft \
     trainer.n_gpus_per_node=$NGPUS \
     trainer.default_hdfs_dir=null \
     trainer.nnodes=1 \
-    trainer.save_freq=300 \
+    trainer.save_freq=50 \
     trainer.rollout_data_dir=${OUTPUT_DIR}/rollout_data \
     trainer.validation_data_dir=${OUTPUT_DIR}/rollout_eval_data \
-    trainer.test_freq=100 \
+    trainer.test_freq=50 \
     +trainer.log_freq=1 \
-    trainer.total_training_steps=${TOTAL_TRAINING_STEPS} \
     trainer.total_epochs=1
