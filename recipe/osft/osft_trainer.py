@@ -455,19 +455,6 @@ class RayOSFTTrainer(RayPPOTrainer):
                             timing_raw=timing_raw,
                         )
                         if current_on_policy_batch is None:
-                            metrics.update({
-                                "training/global_step": self.global_steps,
-                                "training/epoch": epoch,
-                                "training/skipped_degenerate_batch": 1,
-                            })
-                            logger.log(data=metrics, step=self.global_steps)
-                            progress_bar.update(1)
-                            self.global_steps += 1
-                            if is_last_step:
-                                if self.config.trainer.save_freq > 0:
-                                    self._save_checkpoint()
-                                progress_bar.close()
-                                return
                             continue
                         batch, data_source_metrics = data_source_controller.select_training_batch(current_on_policy_batch)
                     metrics.update(data_source_metrics)

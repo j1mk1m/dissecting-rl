@@ -7,15 +7,15 @@ VISIBLE_DEVICES="0,1,2,3"
 
 AFS_PATH=${AFS_PATH:-.}
 MATH_DATA_PATH=data/math
-TRAIN_FILE=$MATH_DATA_PATH/math-easy/train.parquet
-VAL_FILE=$MATH_DATA_PATH/math-medhard/train.parquet
+TRAIN_FILES="[$MATH_DATA_PATH/math-easy/train.parquet,$MATH_DATA_PATH/math-medium/train.parquet]"
+VAL_FILES="[$MATH_DATA_PATH/math-easy/eval.parquet,$MATH_DATA_PATH/math-medium/eval.parquet,$MATH_DATA_PATH/math-hard/eval.parquet]"
 
 LR=1e-6
-BACKBONE_PATH=gyeongwk/stage1-rft
+BACKBONE_PATH=meta-llama/Meta-Llama-3.1-8B-Instruct
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=8192
 ROLLOUT_N=16
-EXPERIMENT="math-onpolicy-SFT"
+EXPERIMENT="math-onpolicy-Reinforce-Baseline"
 
 PROJECT_NAME="math-task"
 
@@ -24,8 +24,9 @@ OUTPUT_DIR="${AFS_PATH}/checkpoints/${PROJECT_NAME}/${EXPERIMENT}"
 
 CUDA_VISIBLE_DEVICES=${VISIBLE_DEVICES} \
 python3 -m recipe.osft.main_osft \
-    data.train_files=$TRAIN_FILE \
-    data.val_files=$VAL_FILE \
+    data.train_files="$TRAIN_FILES" \
+    data.val_files="$VAL_FILES" \
+    data.shuffle=False \
     data.train_batch_size=16 \
     data.filter_overlong_prompts=True \
     data.max_prompt_length=${MAX_PROMPT_LENGTH} \
