@@ -59,7 +59,7 @@ def compute_accuracy(dataset):
         ground_truth = reward_data["ground_truth"]
         score_lst = []
         for r in response_lst:
-            score = _default_compute_score(data_source, r, ground_truth)[1]
+            score = _default_compute_score(data_source, r, ground_truth)
             score_lst.append(score)
         max_score = np.max(score_lst)
         total_scores.append(score_lst)
@@ -74,14 +74,14 @@ def compute_accuracy(dataset):
             by_source[data_source]["passes"] += 1
 
     pass_at_n = passes / total if total else 0.0
-    pass_at_1 = float(np.mean(total_scores)) if total_scores else 0.0
+    pass_at_1 = float(np.mean([[s == 1.0 for s in sl] for sl in total_scores])) if total_scores else 0.0
 
     by_data_source = {}
     for source, d in by_source.items():
         t = d["total"]
         plists = d["score_lists"]
         by_data_source[source] = {
-            "pass_at_1": float(np.mean(plists)) if plists else 0.0,
+            "pass_at_1": float(np.mean([[s == 1.0 for s in sl] for sl in plists])) if plists else 0.0,
             "pass_at_n": d["passes"] / t if t else 0.0,
         }
 
@@ -160,7 +160,7 @@ def analyze_by_function(dataset):
 
         score_lst = []
         for r in response_lst:
-            score = _default_compute_score(data_source, r, ground_truth)[1]
+            score = _default_compute_score(data_source, r, ground_truth)
             score_lst.append(score)
         max_score = np.max(score_lst)
 
@@ -182,7 +182,7 @@ def analyze_by_function(dataset):
 
         result[str(readable_key)] = {
             "func_ids": list(func_key),
-            "pass_at_1": float(np.mean(plists)) if plists else 0.0,
+            "pass_at_1": float(np.mean([[s == 1.0 for s in sl] for sl in plists])) if plists else 0.0,
             "pass_at_n": d["passes"] / t if t else 0.0,
             "total": t,
         }
