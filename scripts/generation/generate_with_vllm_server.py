@@ -259,7 +259,8 @@ def main() -> None:
 
     ckpt.save()
 
-    errors = ckpt.errors()
+    all_responses = ckpt.responses()
+    errors = [(idx, msg) for idx, msg in ckpt.errors() if idx not in all_responses]
     if errors:
         sample_errors = "\n".join(f"idx={idx}: {msg}" for idx, msg in errors[:20])
         raise RuntimeError(
@@ -268,7 +269,6 @@ def main() -> None:
             f"First errors:\n{sample_errors}"
         )
 
-    all_responses = ckpt.responses()
     if len(all_responses) != total:
         raise RuntimeError(
             f"Internal error: have {len(all_responses)} responses for {total} prompts."
