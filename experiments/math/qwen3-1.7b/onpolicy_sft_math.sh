@@ -11,11 +11,11 @@ TRAIN_FILES="[$MATH_DATA_PATH/math-easy/train.parquet,$MATH_DATA_PATH/math-mediu
 VAL_FILES="[$MATH_DATA_PATH/math-easy/eval.parquet,$MATH_DATA_PATH/math-medium/eval.parquet,$MATH_DATA_PATH/math-hard/eval.parquet]"
 
 LR=1e-6
-BACKBONE_PATH=meta-llama/Meta-Llama-3.1-8B-Instruct
+BACKBONE_PATH=Qwen/Qwen3-1.7B
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
-EXPERIMENT="math-onpolicy-PosNeg"
+EXPERIMENT="math-onpolicy-SFT-Qwen3-1.7B"
 
 PROJECT_NAME="math-task"
 
@@ -54,7 +54,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.val_kwargs.do_sample=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
     trainer.enable_train_temperature=False \
-    trainer.enable_negative_sample_training=True \
+    trainer.enable_negative_sample_training=False \
     trainer.reward_std_eps=1e-8 \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \

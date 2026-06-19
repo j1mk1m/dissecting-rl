@@ -13,7 +13,7 @@ VAL_FILES="[$MATH_DATA_PATH/math-easy/eval.parquet,$MATH_DATA_PATH/math-medium/e
 LR=1e-6
 BACKBONE_PATH=meta-llama/Meta-Llama-3.1-8B-Instruct
 MAX_PROMPT_LENGTH=1024
-MAX_GEN_LENGTH=8192
+MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
 EXPERIMENT="math-onpolicy-Reinforce-Baseline"
 
@@ -42,7 +42,7 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=1 \
     actor_rollout_ref.actor.use_kl_loss=False \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
-    actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
+    actor_rollout_ref.actor.fsdp_config.optimizer_offload=True \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.65 \
