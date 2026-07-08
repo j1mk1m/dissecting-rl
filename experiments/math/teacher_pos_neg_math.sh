@@ -7,7 +7,8 @@ VISIBLE_DEVICES="0,1,2,3"
 
 AFS_PATH=${AFS_PATH:-.}
 MATH_DATA_PATH=data/math
-TRAIN_FILES="[$MATH_DATA_PATH/math-easy/train.parquet]"
+TEACHER_DIR=${MATH_DATA_PATH}/teacher/qwen3-1.7b
+TRAIN_FILES="[$TEACHER_DIR/math-easy-train.parquet]"
 VAL_FILES="[$MATH_DATA_PATH/math-easy/eval.parquet,$MATH_DATA_PATH/math-medium/eval.parquet,$MATH_DATA_PATH/math-hard/eval.parquet]"
 
 LR=1e-6
@@ -15,7 +16,7 @@ BACKBONE_PATH=Qwen/Qwen3-1.7B
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
 ROLLOUT_N=16
-EXPERIMENT="math-onpolicy-Reinforce-Baseline-easy-Qwen3-1.7B"
+EXPERIMENT="math-teacher-PosNeg-easy-Qwen3-1.7B"
 
 PROJECT_NAME="math-task"
 
@@ -53,9 +54,9 @@ python3 -m recipe.osft.main_osft \
     actor_rollout_ref.rollout.val_kwargs.n=1 \
     actor_rollout_ref.rollout.val_kwargs.do_sample=False \
     actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
+    trainer.data_source.mode=teacher \
     trainer.enable_train_temperature=False \
     trainer.enable_negative_sample_training=True \
-    trainer.reward_baseline="mean" \
     trainer.reward_std_eps=1e-8 \
     trainer.logger=['console','wandb'] \
     trainer.project_name=${PROJECT_NAME} \
