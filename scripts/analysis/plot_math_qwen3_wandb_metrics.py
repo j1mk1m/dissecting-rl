@@ -44,10 +44,10 @@ SFT_RUN_NAME = "math-onpolicy-SFT-Qwen3-1.7B"
 # stay legible after LaTeX shrinks them. figsize is chosen so BASE_FONT_SIZE
 # lands around 9-10pt effective at print size.
 PANELS = [
-    ("math_qwen3_1.7b_response_length.csv", "Avg response length (tokens)", "math_qwen3_response_length.png", True, (10, 6), 14, True),
-    ("math_qwen3_1.7b_pass1_easy.csv", "Pass@1 (easy)", "math_qwen3_pass1_easy.png", False, (3.6, 3.3), 19, False),
-    ("math_qwen3_1.7b_pass1_medium.csv", "Pass@1 (medium)", "math_qwen3_pass1_medium.png", False, (3.6, 3.3), 19, False),
-    ("math_qwen3_1.7b_pass1_hard.csv", "Pass@1 (hard)", "math_qwen3_pass1_hard.png", False, (3.6, 3.3), 19, False),
+    ("math_qwen3_1.7b_response_length.csv", "Avg response length (tokens)", "math_qwen3_response_length.png", True, (10, 6), 14, True, False),
+    ("math_qwen3_1.7b_pass1_easy.csv", "Pass@1 (easy)", "math_qwen3_pass1_easy.png", False, (5, 4.2), 15, False, True),
+    ("math_qwen3_1.7b_pass1_medium.csv", "Pass@1 (medium)", "math_qwen3_pass1_medium.png", False, (5, 4.2), 15, False, True),
+    ("math_qwen3_1.7b_pass1_hard.csv", "Pass@1 (hard)", "math_qwen3_pass1_hard.png", False, (5, 4.2), 15, False, True),
 ]
 
 
@@ -101,7 +101,7 @@ def load_wandb_csv(path: str):
 
 
 def plot_metric(results_dir: str, fname: str, ylabel: str, output_path: str, apply_smoothing: bool,
-                 figsize: tuple[float, float], base_font_size: int, extend_sft_end: bool):
+                 figsize: tuple[float, float], base_font_size: int, extend_sft_end: bool, legend_outside: bool):
     configure_plot_style(base_font_size)
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -119,19 +119,21 @@ def plot_metric(results_dir: str, fname: str, ylabel: str, output_path: str, app
         if extend_sft_end and run == SFT_RUN_NAME and xs and xs[-1] < max_step:
             # SFT's wandb job stopped logging early (collapsed to ~0 response length,
             # see math_task_response_length_dynamics.md sec 5). Extend flat at its last
-            # value so the line doesn't look cut off; dashed to mark it as inferred,
-            # not actually logged.
-            ax.plot([xs[-1], max_step], [ys[-1], ys[-1]], linewidth=1.8, linestyle="--",
-                     color=line.get_color())
+            # value so the line doesn't look cut off.
+            ax.plot([xs[-1], max_step], [ys[-1], ys[-1]], linewidth=1.8, color=line.get_color())
 
     ax.set_ylabel(ylabel)
     ax.set_xlabel("Training step")
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=base_font_size - 6, loc="best", framealpha=0.9)
+    if legend_outside:
+        ax.legend(fontsize=base_font_size - 5, loc="lower center", bbox_to_anchor=(0.5, 1.02),
+                  ncol=2, frameon=False, handlelength=1.2, columnspacing=1.0, labelspacing=0.3)
+    else:
+        ax.legend(fontsize=base_font_size - 4, loc="best", framealpha=0.9)
 
     fig.tight_layout()
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150)
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
     print(f"Saved {output_path}")
     plt.close(fig)
 
@@ -142,9 +144,9 @@ def main():
     parser.add_argument("--output-dir", default="reports/figures")
     args = parser.parse_args()
 
-    for fname, ylabel, out_name, apply_smoothing, figsize, base_font_size, extend_sft_end in PANELS:
+    for fname, ylabel, out_name, apply_smoothing, figsize, base_font_size, extend_sft_end, legend_outside in PANELS:
         plot_metric(args.results_dir, fname, ylabel, str(Path(args.output_dir) / out_name),
-                    apply_smoothing, figsize, base_font_size, extend_sft_end)
+                    apply_smoothing, figsize, base_font_size, extend_sft_end, legend_outside)
 
 
 if __name__ == "__main__":

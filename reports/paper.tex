@@ -576,7 +576,7 @@ it into a palindrome.
 \begin{subfigure}[b]{0.48\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imgs/math_qwen3_response_length.png}
-    \caption{Math task response length \el{The sft line seems cut off?} \jk{Confirmed real, not a rendering bug: the On-policy SFT run's wandb logging genuinely stops at step 1198, since the job was ended once response length had collapsed to $\sim$0 (Section \ref{sec:experiments} / \texttt{reports/math\_task\_response\_length\_dynamics.md} \S5), while GRPO/PosNeg continued to $\sim$1900. Extended flat (dashed) to the other runs' range instead of leaving it truncated.}}
+    \caption{Math task response length \el{The sft line seems cut off?} \jk{Confirmed real, not a rendering bug: the On-policy SFT run's wandb logging genuinely stops at step 1198, since the job was ended once response length had collapsed to $\sim$0 (Section \ref{sec:experiments} / \texttt{reports/math\_task\_response\_length\_dynamics.md} \S5), while GRPO/PosNeg continued to $\sim$1900. Extended flat to the other runs' range instead of leaving it truncated.}}
     \label{fig:response_length_b}
 \end{subfigure}
 \caption{Accuracy and Average response length over training steps under On-policy data setting on string function task}
