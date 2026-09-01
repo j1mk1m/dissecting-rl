@@ -112,24 +112,17 @@ def generalization_zone_figure():
 
 def response_length_figure():
     methods = ["SFT", "POS+NEG", "REINFORCE+Baseline", "GRPO"]
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
     for method in methods:
         path = RESULTS_DIR / f"string_task_onpolicy_{method.replace('+', '')}_dense.csv"
         rows = read_csv(path)
-        steps = [int(r["_step"]) for r in rows if r["reward/score/mean"]]
-        acc = [float(r["reward/score/mean"]) for r in rows if r["reward/score/mean"]]
         len_steps = [int(r["_step"]) for r in rows if r["rollout/avg_response_length"]]
         lens = [float(r["rollout/avg_response_length"]) for r in rows if r["rollout/avg_response_length"]]
-        ax1.plot(steps, smooth(acc, 0.95), linewidth=1.8, label=method, color=COLOR[method])
-        ax2.plot(len_steps, smooth(lens, 0.95), linewidth=1.8, label=method, color=COLOR[method])
-    ax1.set_xlabel("Training Step")
-    ax1.set_ylabel("Train-batch accuracy")
-    ax1.grid(True, alpha=0.3)
-    ax1.legend()
-    ax2.set_xlabel("Training Step")
-    ax2.set_ylabel("Avg response length (tokens)")
-    ax2.grid(True, alpha=0.3)
-    ax2.legend()
+        ax.plot(len_steps, smooth(lens, 0.95), linewidth=1.8, label=method, color=COLOR[method])
+    ax.set_xlabel("Training Step")
+    ax.set_ylabel("Avg response length (tokens)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
     fig.tight_layout()
     save(fig, "response_length.png")
 
