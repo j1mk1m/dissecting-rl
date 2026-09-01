@@ -33,8 +33,10 @@ RUN_LABELS = {
 
 # math-onpolicy-SFT-Qwen3-1.7B's wandb logging genuinely stops at step 1198 (job
 # ended once response length collapsed to ~0 -- see math_task_response_length_dynamics.md
-# section 5); other runs continue to ~1900. Not a rendering bug -- annotated in the figure.
-SFT_RUN_LAST_LOGGED_STEP = 1198
+# section 5); other runs continue to ~1900. Not a rendering bug -- rather than leaving
+# a truncated line (which reads as a plotting glitch), we extend it flat at its last
+# logged value out to the other runs' range, dashed to mark it as inferred/not logged.
+SFT_RUN_NAME = "math-onpolicy-SFT-Qwen3-1.7B"
 
 # Font sizes are tuned per-panel for how the figure is actually placed in the
 # paper: the three pass@1 panels sit 3-across at 0.3\textwidth each (~1.65in
@@ -99,11 +101,13 @@ def load_wandb_csv(path: str):
 
 
 def plot_metric(results_dir: str, fname: str, ylabel: str, output_path: str, apply_smoothing: bool,
-                 figsize: tuple[float, float], base_font_size: int, annotate_sft_end: bool):
+                 figsize: tuple[float, float], base_font_size: int, extend_sft_end: bool):
     configure_plot_style(base_font_size)
     fig, ax = plt.subplots(figsize=figsize)
 
     series = load_wandb_csv(str(Path(results_dir) / fname))
+    max_step = max((s for run in series.values() for s, _ in run), default=0)
+
     for run, label in RUN_LABELS.items():
         if run not in series or not series[run]:
             continue
@@ -111,14 +115,14 @@ def plot_metric(results_dir: str, fname: str, ylabel: str, output_path: str, app
         ys = [v for _, v in series[run]]
         if apply_smoothing:
             ys = smooth(ys, SMOOTHING)
-        ax.plot(xs, ys, linewidth=1.8, label=label)
-        if annotate_sft_end and run == "math-onpolicy-SFT-Qwen3-1.7B" and xs and xs[-1] <= SFT_RUN_LAST_LOGGED_STEP + 5:
+        (line,) = ax.plot(xs, ys, linewidth=1.8, label=label)
+        if extend_sft_end and run == SFT_RUN_NAME and xs and xs[-1] < max_step:
             # SFT's wandb job stopped logging early (collapsed to ~0 response length,
-            # see math_task_response_length_dynamics.md sec 5) -- mark it so a truncated
-            # line doesn't read as a plotting bug.
-            ax.annotate("SFT run ended here\n(job stopped after collapse)", xy=(xs[-1], ys[-1]), xytext=(-15, 60),
-                        textcoords="offset points", ha="left", fontsize=base_font_size - 3,
-                        arrowprops=dict(arrowstyle="->", lw=1.2))
+            # see math_task_response_length_dynamics.md sec 5). Extend flat at its last
+            # value so the line doesn't look cut off; dashed to mark it as inferred,
+            # not actually logged.
+            ax.plot([xs[-1], max_step], [ys[-1], ys[-1]], linewidth=1.8, linestyle="--",
+                     color=line.get_color())
 
     ax.set_ylabel(ylabel)
     ax.set_xlabel("Training step")
@@ -138,9 +142,9 @@ def main():
     parser.add_argument("--output-dir", default="reports/figures")
     args = parser.parse_args()
 
-    for fname, ylabel, out_name, apply_smoothing, figsize, base_font_size, annotate_sft_end in PANELS:
+    for fname, ylabel, out_name, apply_smoothing, figsize, base_font_size, extend_sft_end in PANELS:
         plot_metric(args.results_dir, fname, ylabel, str(Path(args.output_dir) / out_name),
-                    apply_smoothing, figsize, base_font_size, annotate_sft_end)
+                    apply_smoothing, figsize, base_font_size, extend_sft_end)
 
 
 if __name__ == "__main__":
