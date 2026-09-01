@@ -560,7 +560,7 @@ it into a palindrome.
     \caption{Accuracy on hard set}
     \label{fig:math_hard}
 \end{subfigure}
-\caption{Validation accuracy on math task \el{The text of these figures is way too small, they are pretty unreadable}}
+\caption{Validation accuracy on math task \el{The text of these figures is way too small, they are pretty unreadable} \jk{Regenerated with panel-appropriate fonts (\texttt{scripts/analysis/plot\_math\_qwen3\_wandb\_metrics.py}, sized for 3-across at 0.3\textwidth); should be legible now.}}
 \label{fig:generalization-zone-accuracy-math}
 \end{figure}
 
@@ -576,7 +576,7 @@ it into a palindrome.
 \begin{subfigure}[b]{0.48\textwidth}
     \centering
     \includegraphics[width=\textwidth]{imgs/math_qwen3_response_length.png}
-    \caption{Math task response length \el{The sft line seems cut off?}}
+    \caption{Math task response length \el{The sft line seems cut off?} \jk{Confirmed real, not a rendering bug: the On-policy SFT run's wandb logging genuinely stops at step 1198, since the job was ended once response length had collapsed to $\sim$0 (Section \ref{sec:experiments} / \texttt{reports/math\_task\_response\_length\_dynamics.md} \S5), while GRPO/PosNeg continued to $\sim$1900. Now annotated directly on the figure.}}
     \label{fig:response_length_b}
 \end{subfigure}
 \caption{Accuracy and Average response length over training steps under On-policy data setting on string function task}
