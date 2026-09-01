@@ -1,0 +1,18 @@
+{
+  "Bootstrap": {
+    "accuracy": 0.1185,
+    "pos_len": 332.1754571026723,
+    "neg_len": 435.3698477973152,
+    "all_correct_pct": 0.4666666666666667,
+    "all_incorrect_pct": 67.56666666666666,
+    "mixed_pct": 31.966666666666665
+  },
+  "Teacher": {
+    "accuracy": 0.8400416666666667,
+    "pos_len": 527.3227518476266,
+    "neg_len": 875.1918468351133,
+    "all_correct_pct": 65.86666666666666,
+    "all_incorrect_pct": 9.9,
+    "mixed_pct": 24.233333333333334
+  }
+}

@@ -30,6 +30,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=0.0, help="Sampling temperature.")
     parser.add_argument("--top-p", type=float, default=1.0, help="Sampling top-p.")
     parser.add_argument("--max-tokens", type=int, default=512, help="Max generated tokens per sample.")
+    parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=None,
+        help="Server's max context length. If set, per-request max_tokens is capped to fit "
+             "(max-model-len - prompt tokens), so long prompts don't get rejected with 400.",
+    )
+    parser.add_argument(
+        "--tokenizer-path",
+        default=None,
+        help="Tokenizer to count prompt tokens with, for --max-model-len capping. Defaults to --model.",
+    )
     parser.add_argument("--num-workers", type=int, default=8, help="Concurrent request workers.")
     parser.add_argument("--timeout", type=float, default=180.0, help="HTTP timeout per request in seconds.")
     parser.add_argument("--max-retries", type=int, default=5, help="Max retry attempts per sample request.")
@@ -97,11 +109,15 @@ def parse_stop(stop_raw: str | None) -> str | list[str] | None:
     return stop_raw
 
 
+CONTEXT_LEN_MARGIN = 8  # buffer tokens for chat-template/tokenizer mismatches with the server
+
+
 def _request_n(
     url: str,
     messages: list[dict],
     n: int,
     model: str,
+    max_tokens: int,
     args: argparse.Namespace,
     stop: str | list[str] | None,
 ) -> list[str]:
@@ -111,7 +127,7 @@ def _request_n(
         "n": n,
         "temperature": args.temperature,
         "top_p": args.top_p,
-        "max_tokens": args.max_tokens,
+        "max_tokens": max_tokens,
     }
     if stop is not None:
         payload["stop"] = stop
@@ -139,16 +155,30 @@ def generate_one(
     model: str,
     args: argparse.Namespace,
     stop: str | list[str] | None,
+    tokenizer: Any | None,
 ) -> list[str]:
     url = f"{args.server_url.rstrip('/')}/v1/chat/completions"
     messages = normalize_messages(prompt)
     batch_n = args.batch_n if args.batch_n is not None else args.n_samples
 
+    max_tokens = args.max_tokens
+    if tokenizer is not None:
+        prompt_tokens = len(
+            tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True)
+        )
+        budget = args.max_model_len - prompt_tokens - CONTEXT_LEN_MARGIN
+        if budget < 1:
+            raise RuntimeError(
+                f"Prompt alone ({prompt_tokens} tokens) leaves no room within "
+                f"--max-model-len {args.max_model_len}."
+            )
+        max_tokens = min(args.max_tokens, budget)
+
     results: list[str] = []
     remaining = args.n_samples
     while remaining > 0:
         n = min(batch_n, remaining)
-        results.extend(_request_n(url, messages, n, model, args, stop))
+        results.extend(_request_n(url, messages, n, model, max_tokens, args, stop))
         remaining -= n
     return results
 
@@ -230,6 +260,13 @@ def main() -> None:
     model = resolve_model_name(args.server_url, args.model, args.timeout)
     print(f"Using model: {model}")
 
+    tokenizer = None
+    if args.max_model_len is not None:
+        from transformers import AutoTokenizer
+
+        tokenizer_path = args.tokenizer_path or model
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+
     dataset = load_dataset("parquet", data_files=args.data_path)["train"]
     prompts = dataset[args.prompt_key]
     total = len(prompts)
@@ -247,7 +284,9 @@ def main() -> None:
 
     with ThreadPoolExecutor(max_workers=args.num_workers) as executor:
         future_to_index = {
-            executor.submit(generate_one, prompt=prompts[idx], model=model, args=args, stop=stop): idx
+            executor.submit(
+                generate_one, prompt=prompts[idx], model=model, args=args, stop=stop, tokenizer=tokenizer
+            ): idx
             for idx in pending_indices
         }
         for future in tqdm(as_completed(future_to_index), total=len(pending_indices), desc="Generating"):

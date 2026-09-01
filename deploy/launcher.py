@@ -10,7 +10,15 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Submit an sbatch job using a template file. Replaces #NAME and #SCRIPT."
-        )
+        ),
+        epilog=(
+            "Extra sbatch flags (e.g. --exclude=babel-p5-24, --nodelist=babel-x9-16) "
+            "can be appended after the script path and are passed through to `sbatch` "
+            "unchanged. Put --template before the script path, since anything after "
+            "the script path is treated as a raw sbatch flag, e.g.:\n"
+            "  python deploy/launcher.py --template t.sbatch script.sh --exclude=babel-p5-24"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "script_path",
@@ -22,6 +30,14 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=Path(__file__).with_name("template.sbatch"),
         help="Path to sbatch template (default: deploy/template.sbatch).",
+    )
+    parser.add_argument(
+        "sbatch_args",
+        nargs=argparse.REMAINDER,
+        help=(
+            "Extra arguments passed through to `sbatch` unchanged, e.g. "
+            "--exclude=babel-p5-24 or --nodelist=babel-x9-16."
+        ),
     )
     return parser.parse_args()
 
@@ -55,7 +71,7 @@ def main() -> None:
         temp_sbatch.write(sbatch_contents)
         temp_sbatch.flush()
         result = subprocess.run(
-            ["sbatch", temp_sbatch.name],
+            ["sbatch", *args.sbatch_args, temp_sbatch.name],
             check=False,
             text=True,
             capture_output=True,
