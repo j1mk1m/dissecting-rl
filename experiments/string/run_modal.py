@@ -27,13 +27,13 @@ import modal
 
 
 APP_NAME = "string-task-experiment-runner"
-REPO_ROOT = "/root/compositional-generality"
+REPO_ROOT = "/root/dissecting-rl"
 LOCAL_REPO_ROOT = str(Path(__file__).resolve().parents[1])
 DEFAULT_SCRIPT_PATH = "experiments/data-onpolicy-loss-fn-vary/onpolicy_grpo.sh"
 
 # Make sure these volumes exist and contain your data before running:
-# - `cg-string-task-data` mounted at /root/RL-Compositionality/data
-# - `cg-user-data` mounted at /data/user_data/gyeongwk
+# - `cg-string-task-data` mounted at /root/dissecting-rl/data
+# - `cg-user-data` mounted at /data/user_data
 CHECKPOINTS_VOLUME = modal.Volume.from_name("cg-string-task-checkpoints", create_if_missing=True)
 
 # Use a prebuilt training image if provided, otherwise use a CUDA-ready base.
@@ -70,7 +70,7 @@ def _validate_script_path(script_path: str) -> str:
     timeout=86400,
     secrets=[modal.Secret.from_name("wandb-secret")],
     volumes={
-        "/root/compositional-generality/checkpoints": CHECKPOINTS_VOLUME,
+        "/root/dissecting-rl/checkpoints": CHECKPOINTS_VOLUME,
     },
 )
 def run_experiment_on_modal(

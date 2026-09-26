@@ -1,14 +1,14 @@
 #!/bin/bash
 set -e
 
-BASE_DIR="/data/user_data/gyeongwk/checkpoints/math-task"
-SCRIPT="/home/gyeongwk/compositional-generality/scripts/model_merger.py"
+BASE_DIR="checkpoints/math-task"
+SCRIPT="scripts/model_merger.py"
 
 declare -A HF_PREFIX=(
-    ["math-onpolicy-GRPO-Qwen3-1.7B"]="gyeongwk/Math-On-policy-GRPO-Qwen3-1.7B"
-    ["math-onpolicy-PosNeg-Qwen3-1.7B"]="gyeongwk/Math-On-policy-PosNeg-Qwen3-1.7B"
-    ["math-onpolicy-Reinforce-Baseline-Qwen3-1.7B"]="gyeongwk/Math-On-policy-Reinforce-Baseline-Qwen3-1.7B"
-    ["math-onpolicy-SFT-Qwen3-1.7B"]="gyeongwk/Math-On-policy-SFT-Qwen3-1.7B"
+    ["math-onpolicy-GRPO-Qwen3-1.7B"]="${HF_USER:-anonymous}/Math-On-policy-GRPO-Qwen3-1.7B"
+    ["math-onpolicy-PosNeg-Qwen3-1.7B"]="${HF_USER:-anonymous}/Math-On-policy-PosNeg-Qwen3-1.7B"
+    ["math-onpolicy-Reinforce-Baseline-Qwen3-1.7B"]="${HF_USER:-anonymous}/Math-On-policy-Reinforce-Baseline-Qwen3-1.7B"
+    ["math-onpolicy-SFT-Qwen3-1.7B"]="${HF_USER:-anonymous}/Math-On-policy-SFT-Qwen3-1.7B"
 )
 
 for exp in "${!HF_PREFIX[@]}"; do

@@ -1,9 +1,7 @@
 #!/bin/bash
-#SBATCH --partition flame-earlybirds
-#SBATCH --qos earlybird_qos
+#SBATCH --partition general
 #SBATCH --time 1-23:00 # set time
 #SBATCH --job-name=stage1_rft
-#SBATCH --chdir=/home/gyeongwk/RL-Compositionality # working directory
 
 #SBATCH --gres=gpu:4
 #SBATCH --mem=256GB
@@ -11,8 +9,6 @@
 
 #SBATCH --output=logs/%x-%j.out # output log
 #SBATCH --error=logs/%x-%j.err # error log
-#SBATCH --mail-type=ALL
-#SBATCH --mail-user=j1mk1m.dummy@gmail.com
 
 source ~/.bashrc
 conda activate rl_comp
@@ -27,6 +23,6 @@ export TRAIN_FILES=data/string_task/stage1_level1/rft_data/train.parquet
 export VAL_FILES=data/string_task/stage1_level1/rft_data/test.parquet 
 export BATCH_SIZE=128
 export EPOCHS=2
-export SAVE_DIR=/data/user_data/gyeongwk/checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}
+export SAVE_DIR=checkpoints/${PROJECT_NAME}/${EXPERIMENT_NAME}
 
-bash experiments/sft/template.sh
+bash experiments/_archive/sft/template.sh

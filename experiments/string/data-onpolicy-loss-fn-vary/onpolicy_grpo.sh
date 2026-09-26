@@ -10,7 +10,7 @@ TRAIN_FILE=$STRING_TASK_PATH/stage2_level2/train.parquet
 VAL_FILE=$STRING_TASK_PATH/stage2_level1to8/test.parquet
 
 LR=1e-6
-BACKBONE_PATH=gyeongwk/stage1-rft
+BACKBONE_PATH=${HF_USER:-anonymous}/stage1-rft
 MAX_PROMPT_LENGTH=1024
 MAX_GEN_LENGTH=4096
 ROLLOUT_N=16

@@ -1,7 +1,7 @@
 """Investigate model collapse in string-task off-policy (Bootstrap/Teacher) runs
 that use a negative-sample loss (POS+NEG, REINFORCE+BASELINE, GRPO).
 
-Runs analyzed live in /data/user_data/gyeongwk/checkpoints/string-task/:
+Runs analyzed live in checkpoints/string-task/:
   - Bootstrap-GRPO
   - Bootstrap-REINFORCE+BASELINE
   - Teacher-GRPO
@@ -24,7 +24,7 @@ This script:
      collapse in the model's own words.
   3. Scores the two frozen pools directly (same extraction/matching logic as
      verl/utils/reward_score/codeio.py's compute_score_forward) and tokenizes
-     every response with the actual training tokenizer (gyeongwk/stage1-rft)
+     every response with the actual training tokenizer (anonymous/stage1-rft)
      to get real token lengths, then reports the pos/neg length gap and
      group-composition (all-correct / all-incorrect / mixed) stats that
      determine how much gradient signal each loss actually gets and in which
@@ -32,7 +32,7 @@ This script:
 
 Usage:
     python scripts/analysis/string_task_collapse_analysis.py \
-        --checkpoints-dir /data/user_data/gyeongwk/checkpoints/string-task \
+        --checkpoints-dir checkpoints/string-task \
         --output-dir reports/figures
 """
 
@@ -58,7 +58,7 @@ POOLS = {
     "Teacher": "data/string_task/teacher-grpo/rollout.parquet",
 }
 
-TOKENIZER_PATH = "gyeongwk/stage1-rft"
+TOKENIZER_PATH = "anonymous/stage1-rft"
 MAX_GEN_LENGTH = 4096
 
 
@@ -237,7 +237,7 @@ def summarize_pool(label: str, scores, lengths, group_sizes, max_gen_length: int
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--checkpoints-dir", default="/data/user_data/gyeongwk/checkpoints/string-task")
+    parser.add_argument("--checkpoints-dir", default="checkpoints/string-task")
     parser.add_argument("--output-dir", default="reports/figures")
     parser.add_argument("--pool-sample", type=int, default=3000,
                          help="Number of prompts to sample per frozen pool (0 = all 19200)")

@@ -5,16 +5,17 @@ project GraphQL reads) and cache them as CSVs in results/.
 String-task runs on the cluster get preempted and resumed under fresh wandb
 run IDs, so each on-policy method here is a *chain* of 2-3 run segments
 stitched together by step (later segment wins on overlap). The chains below
-were identified by walking j1mk1m/string-task's run list and picking, for
+were identified by walking the string-task project's run list and picking, for
 each (data-source x loss) cell, the runs whose step ranges tile a contiguous
 0->final trajectory.
 
 Usage:
-    python scripts/analysis/fetch_wandb_training_dynamics.py
+    WANDB_ENTITY=<entity> python scripts/analysis/fetch_wandb_training_dynamics.py
 """
 
 import csv
 import json
+import os
 import urllib.request
 from pathlib import Path
 
@@ -105,7 +106,7 @@ def write_csv(path: Path, rows: list[dict], fieldnames: list[str]):
 
 
 def main():
-    entity = "j1mk1m"
+    entity = os.environ["WANDB_ENTITY"]
 
     # 1. On-policy string-task training dynamics: dense (grad_norm/perplexity/response_length/score)
     dense_keys = ["_step", "actor/grad_norm", "actor/perplexity", "rollout/avg_response_length", "reward/score/mean"]

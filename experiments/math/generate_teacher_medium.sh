@@ -2,7 +2,7 @@ set -e
 set -x
 export VLLM_USE_V1=0
 
-BACKBONE_PATH=gyeongwk/Math-On-policy-GRPO-Qwen3-1.7B-step-1800
+BACKBONE_PATH=${HF_USER:-anonymous}/Math-On-policy-GRPO-Qwen3-1.7B-step-1800
 MATH_DATA_PATH=data/math
 TEACHER_DIR=${MATH_DATA_PATH}/teacher/qwen3-1.7b
 N_SAMPLES=16

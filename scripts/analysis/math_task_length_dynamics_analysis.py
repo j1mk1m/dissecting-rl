@@ -16,7 +16,7 @@ Also renders the length+accuracy figures referenced in the report.
 Usage:
     python scripts/analysis/math_task_length_dynamics_analysis.py
     python scripts/analysis/math_task_length_dynamics_analysis.py \
-        --checkpoints-dir /data/user_data/gyeongwk/checkpoints/math-task \
+        --checkpoints-dir checkpoints/math-task \
         --output-dir reports/figures
 
 Each step-level aggregate is also cached as a CSV under --output-dir so the
@@ -280,7 +280,7 @@ def plot_bootstrap_run(bootstrap_stats, output_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--checkpoints-dir", default="/data/user_data/gyeongwk/checkpoints/math-task",
+    parser.add_argument("--checkpoints-dir", default="checkpoints/math-task",
                          help="Directory containing the per-run checkpoint subfolders")
     parser.add_argument("--output-dir", default="reports/figures",
                          help="Where to save figures and per-step CSV caches")

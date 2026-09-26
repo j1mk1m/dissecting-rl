@@ -97,10 +97,12 @@ Key findings on the loss axis: introducing negative gradients (POS+NEG) recovers
 ## Setup
 
 ```bash
-git clone https://github.com/j1mk1m/dissecting-rl.git
+git clone <anonymized-repo-url> dissecting-rl
 cd dissecting-rl
 pip install -e ".[vllm]"
 ```
+
+Model checkpoints are referenced as `anonymous/<model>` for review. Shell scripts read the Hugging Face namespace from `HF_USER` (default `anonymous`), so set `export HF_USER=<your-hf-namespace>` to use your own uploads. `scripts/analysis/fetch_wandb_training_dynamics.py` needs `WANDB_ENTITY`.
 
 **Requirements:** 4× A100 GPUs (all scripts use `CUDA_VISIBLE_DEVICES=0,1,2,3`).
 
@@ -116,8 +118,8 @@ pip install -e ".[vllm]"
 |---|---|
 | `stage2_level2/train.parquet` | Train set, depth-2 compositions |
 | `stage2_level1to8/test.parquet` | Eval set, depths 1–8 |
-| `teacher-grpo/rollout.parquet` | Rollouts from the on-policy GRPO model (`gyeongwk/On-policy-GRPO`) |
-| `teacher-bootstrap/rollout.parquet` | Rollouts from the initial model `gyeongwk/stage1-rft` |
+| `teacher-grpo/rollout.parquet` | Rollouts from the on-policy GRPO model (`anonymous/On-policy-GRPO`) |
+| `teacher-bootstrap/rollout.parquet` | Rollouts from the initial model `anonymous/stage1-rft` |
 
 Regenerate the string datasets with:
 ```bash
@@ -130,7 +132,7 @@ python scripts/data_preprocess/string_data_analysis.py --input <parquet>
 | Path | Description |
 |---|---|
 | `math-{easy,medium,hard}/{train,eval}.parquet` | Difficulty splits |
-| `teacher/qwen3-1.7b/math-{easy,medium}-train.parquet` | Rollouts from `gyeongwk/Math-On-policy-GRPO-Qwen3-1.7B-step-1800` |
+| `teacher/qwen3-1.7b/math-{easy,medium}-train.parquet` | Rollouts from `anonymous/Math-On-policy-GRPO-Qwen3-1.7B-step-1800` |
 | `bootstrap/qwen3-1.7b/math-{easy,medium}-train.parquet` | Rollouts from base `Qwen/Qwen3-1.7B` |
 
 Check that the math parquets are compatible with the training pipeline:
@@ -156,7 +158,7 @@ All methods use the OSFT recipe (`recipe.osft.main_osft`). The loss function is 
 
 ### String task scripts
 
-Backbone: `gyeongwk/stage1-rft` (Llama-3.1-8B, RFT on depth-1 data). W&B project: `string-task`.
+Backbone: `anonymous/stage1-rft` (Llama-3.1-8B, RFT on depth-1 data). W&B project: `string-task`.
 
 ```bash
 # {sft, grpo, pos_neg, reinforce_baseline} for each data source
@@ -189,7 +191,7 @@ bash experiments/math/convert_and_upload.sh
 
 | Parameter | String task | Math task |
 |---|---|---|
-| Backbone | `gyeongwk/stage1-rft` (Llama-3.1-8B) | `Qwen/Qwen3-1.7B` |
+| Backbone | `anonymous/stage1-rft` (Llama-3.1-8B) | `Qwen/Qwen3-1.7B` |
 | GPUs | 4 | 4 |
 | Rollouts per prompt ($G$) | 16 | 16 |
 | Train batch size | 16 prompts | 16 prompts |
@@ -211,7 +213,6 @@ python deploy/launcher.py experiments/... --template deploy/template_A100_80GB.s
 |---|---|
 | `template.sbatch` | Default (`general` partition) |
 | `template_A100_80GB.sbatch` | Requests A100 80GB |
-| `template_flame.sbatch` | `flame-earlybirds` queue |
 | `template_light.sbatch` | Lighter resource request |
 | `template_cpu.sbatch` | CPU-only jobs |
 | `template_preempt.sbatch` | Preemptible jobs |

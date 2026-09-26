@@ -1,8 +1,8 @@
 export NCCL_P2P_DISABLE=1
-export VLLM_CACHE_DIR=/data/user_data/$USER/.cache/vllm
+export VLLM_CACHE_DIR=${HOME}/.cache/vllm
 export VLLM_ALLOW_INSECURE_SERIALIZATION=1
 
-MODEL="gyeongwk/On-policy-GRPO"
+MODEL="${HF_USER:-anonymous}/On-policy-GRPO"
 PORT=8084
 
 if ss -tulwn | grep -q ":$PORT "; then

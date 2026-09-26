@@ -34,7 +34,7 @@ import os
 import re
 from collections import Counter
 
-BASE_DIR = "/data/user_data/gyeongwk/checkpoints"
+BASE_DIR = "checkpoints"
 
 TOKEN_LIMIT = 4096
 Q_RUN_LEN = 50       # consecutive q's → q_spam

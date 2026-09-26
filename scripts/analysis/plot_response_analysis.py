@@ -28,7 +28,7 @@ import numpy as np
 
 # ── config ────────────────────────────────────────────────────────────────────
 
-BASE_DIR    = "/data/user_data/gyeongwk/checkpoints/string-task"
+BASE_DIR    = "checkpoints/string-task"
 TOKEN_LIMIT = 4096
 Q_RUN_LEN   = 50
 LOOP_NGRAM  = 40

@@ -11,7 +11,7 @@ The project trains LLMs (e.g., Llama-3.1-8B) using Offline SFT with RL (OSFT) on
 ## Repository Structure
 
 ```
-compositional-generality/
+dissecting-rl/
 ├── verl/                    # Core verl framework (distributed RL training)
 │   ├── trainer/             # Main training entrypoints & Hydra configs
 │   ├── workers/             # Actor, Critic, Rollout, RewardManager workers
@@ -97,17 +97,17 @@ Levels correspond to composition depth (number of operators applied sequentially
 ### Primary OSFT Training (string task)
 
 ```bash
-cd /home/gyeongwk/compositional-generality
+cd dissecting-rl
 bash experiments/osft/osft_string_task.sh
 ```
 
 Key parameters in the script:
-- `BACKBONE_PATH=gyeongwk/stage1-rft` — HuggingFace model path
+- `BACKBONE_PATH=anonymous/stage1-rft` — HuggingFace model path
 - `TRAIN_FILE` — points to `stage2_level2/train.parquet`
 - `VAL_FILE` — points to `stage2_level1to8/test.parquet`
 - `ROLLOUT_N=16` — samples per prompt during training
 - `LR=1e-6`, `MAX_GEN_LENGTH=8192`
-- Output goes to `/data/user_data/gyeongwk/checkpoints/string-task/`
+- Output goes to `checkpoints/string-task/`
 
 ### Direct Python invocation
 
@@ -212,6 +212,6 @@ See `verl/utils/dataset/README.md` for full schema.
 
 ## Checkpoints
 
-Checkpoints are saved to `trainer.default_local_dir` (set in the shell script to `/data/user_data/gyeongwk/checkpoints/`). The `trainer.save_freq` controls how often. Rollout data is saved separately to `trainer.rollout_data_dir`.
+Checkpoints are saved to `trainer.default_local_dir` (set in the shell script to `checkpoints/`). The `trainer.save_freq` controls how often. Rollout data is saved separately to `trainer.rollout_data_dir`.
 
 To resume training: set `trainer.resume_mode=auto` and point `trainer.default_local_dir` to the existing checkpoint directory.

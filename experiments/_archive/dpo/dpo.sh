@@ -13,7 +13,7 @@ EXP_NAME="dpo-example"
 # -------- Editable paths --------
 TRAIN_FILE="data/string_task/dpo/train.parquet"
 VAL_FILE="data/string_task/dpo/test.parquet"
-MODEL_PATH=${MODEL_PATH:-"gyeongwk/stage1-rft"}
+MODEL_PATH=${MODEL_PATH:-"${HF_USER:-anonymous}/stage1-rft"}
 OUTPUT_DIR=${OUTPUT_DIR:-"checkpoints/${EXP_NAME}"}
 
 # -------- Hardware --------

@@ -31,7 +31,7 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
-BASE_DIR = "/data/user_data/gyeongwk/checkpoints"
+BASE_DIR = "checkpoints"
 
 FUNC_NAMES = {
     0: "deterministic_shuffle", 1: "repeat_str", 2: "remove_vowels",

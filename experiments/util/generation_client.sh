@@ -1,6 +1,6 @@
-MODEL="gyeongwk/On-policy-GRPO"
+MODEL="${HF_USER:-anonymous}/On-policy-GRPO"
 MODEL_NAME="teacher-grpo"
-MACHINE="babel-o9-16"
+MACHINE="localhost"
 PORT="8084"
 
 python3 scripts/generation/generate_with_vllm_server.py \
@@ -14,6 +14,6 @@ python3 scripts/generation/generate_with_vllm_server.py \
   --temperature 1.0 \
   --max-tokens 4096 \
   --num-workers 4 \
-  --checkpoint-path /data/user_data/gyeongwk/checkpoints/$MODEL_NAME-rollout.checkpoint.jsonl
+  --checkpoint-path checkpoints/$MODEL_NAME-rollout.checkpoint.jsonl
 
 #python scripts/evaluation/process_eval.py eval/$MODEL_NAME/rollout.parquet eval/$MODEL_NAME/accuracy.json

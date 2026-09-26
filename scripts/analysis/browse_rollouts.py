@@ -17,7 +17,7 @@ import re
 import sys
 import textwrap
 
-BASE_DIR = "/data/user_data/gyeongwk/checkpoints"
+BASE_DIR = "checkpoints"
 
 
 def get_composition_depth(input_str: str) -> int:

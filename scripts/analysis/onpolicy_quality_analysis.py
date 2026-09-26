@@ -41,7 +41,7 @@ from pathlib import Path
 
 import numpy as np
 
-BASE_DIR = "/data/user_data/gyeongwk/checkpoints/string-task"
+BASE_DIR = "checkpoints/string-task"
 TOKEN_LIMIT = 4096
 
 COMPARE_RUNS = {
