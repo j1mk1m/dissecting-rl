@@ -49,6 +49,22 @@ MATH_BOOTSTRAP_SFT_RUN = "297gy4rz"
 
 ENTROPY_KEY = "val/16-codeio-forward-incomplete-depth2/entropy/avg"
 
+# On-policy math-task runs are also resumed chains (same cluster-preemption pattern
+# as string-task); earlier id first.
+MATH_TASK_ONPOLICY_CHAINS = {
+    "GRPO": ["7yqjetyk", "2zpizahh"],
+    "PosNeg": ["z3qmq1df", "en0qvey1", "cfhvlll4"],
+    "SFT": ["xjx8xkjg", "fnpd7ype"],
+    "ReinforceBaseline": ["ztfye15q"],
+}
+
+MATH_ENTROPY_KEYS = [
+    "_step",
+    "val/16-math-easy/entropy/avg",
+    "val/16-math-medium/entropy/avg",
+    "val/16-math-hard/entropy/avg",
+]
+
 
 def gql(query: str, variables: dict) -> dict:
     req = urllib.request.Request(
@@ -118,6 +134,11 @@ def main():
     ]
     rows = fetch_history(entity, "math-task", MATH_BOOTSTRAP_SFT_RUN, math_keys, samples=3000)
     write_csv(RESULTS_DIR / "math_bootstrap_sft_easy_pass1.csv", rows, math_keys)
+
+    # 5. On-policy math-task entropy (easy/medium/hard splits)
+    for method, chain in MATH_TASK_ONPOLICY_CHAINS.items():
+        rows = fetch_chain(entity, "math-task", chain, MATH_ENTROPY_KEYS)
+        write_csv(RESULTS_DIR / f"math_onpolicy_{method}_entropy.csv", rows, MATH_ENTROPY_KEYS)
 
 
 if __name__ == "__main__":

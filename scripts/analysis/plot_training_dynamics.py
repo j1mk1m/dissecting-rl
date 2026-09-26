@@ -112,13 +112,24 @@ def generalization_zone_figure():
 
 def response_length_figure():
     methods = ["SFT", "POS+NEG", "REINFORCE+Baseline", "GRPO"]
-    fig, ax = plt.subplots(figsize=(8, 5))
+    series = {}
     for method in methods:
         path = RESULTS_DIR / f"string_task_onpolicy_{method.replace('+', '')}_dense.csv"
         rows = read_csv(path)
         len_steps = [int(r["_step"]) for r in rows if r["rollout/avg_response_length"]]
         lens = [float(r["rollout/avg_response_length"]) for r in rows if r["rollout/avg_response_length"]]
-        ax.plot(len_steps, smooth(lens, 0.95), linewidth=1.8, label=method, color=COLOR[method])
+        series[method] = (len_steps, lens)
+
+    # Runs are resumed chains of different total length (see fetch script); cut every
+    # line at the shortest run's last step so no method appears to end early relative
+    # to the others.
+    cutoff = min(steps[-1] for steps, _ in series.values() if steps)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for method in methods:
+        len_steps, lens = series[method]
+        len_steps, lens = zip(*[(s, v) for s, v in zip(len_steps, lens) if s <= cutoff])
+        ax.plot(len_steps, smooth(list(lens), 0.95), linewidth=1.8, label=method, color=COLOR[method])
     ax.set_xlabel("Training Step")
     ax.set_ylabel("Avg response length (tokens)")
     ax.grid(True, alpha=0.3)
@@ -128,15 +139,21 @@ def response_length_figure():
 
 
 def entropy_figure():
+    # GRPO has an isolated, single-checkpoint entropy spike at step 1100 (0.72 vs a
+    # ~0.02-0.03 baseline) that math-task entropy does not reproduce at the analogous
+    # point in any of its 4 runs -- treated as noise from that one eval snapshot, not a
+    # real training-dynamics finding. Cut at step 1050 (last clean point) for all
+    # methods so the spike is excluded and all lines end at a common step.
     methods = ["SFT", "POS+NEG", "REINFORCE+Baseline", "GRPO"]
+    key = "val/16-codeio-forward-incomplete-depth2/entropy/avg"
+    cutoff = 1050
     fig, ax = plt.subplots(figsize=(8, 5))
     for method in methods:
         path = RESULTS_DIR / f"string_task_onpolicy_{method.replace('+', '')}_entropy.csv"
         rows = read_csv(path)
-        key = "val/16-codeio-forward-incomplete-depth2/entropy/avg"
-        steps = [int(r["_step"]) for r in rows if r[key]]
-        vals = [float(r[key]) for r in rows if r[key]]
-        ax.plot(steps, vals, marker="o", markersize=4, linewidth=1.8, label=method, color=COLOR[method])
+        steps = [int(r["_step"]) for r in rows if r[key] and int(r["_step"]) <= cutoff]
+        vals = [float(r[key]) for r in rows if r[key] and int(r["_step"]) <= cutoff]
+        ax.plot(steps, smooth(vals, 0.5), linewidth=1.8, label=method, color=COLOR[method])
     ax.set_xlabel("Training Step")
     ax.set_ylabel("Eval entropy (depth-2, avg)")
     ax.grid(True, alpha=0.3)
@@ -164,33 +181,47 @@ def grad_norm_figure():
 
 
 def grad_norm_collapse_figure():
+    import numpy as np
+
     onpolicy_methods = ["SFT", "POS+NEG", "REINFORCE+Baseline", "GRPO"]
-    offpolicy_runs = {
-        "Bootstrap-GRPO": ("string_task_offpolicy_Bootstrap_GRPO_gradnorm.csv", COLOR["Bootstrap"], "-"),
-        "Bootstrap-REINFORCE+Baseline": ("string_task_offpolicy_Bootstrap_REINFORCEBaseline_gradnorm.csv", COLOR["Bootstrap"], "--"),
-        "Teacher-GRPO": ("string_task_offpolicy_Teacher_GRPO_gradnorm.csv", COLOR["Teacher"], "-"),
-        "Teacher-REINFORCE+Baseline": ("string_task_offpolicy_Teacher_REINFORCEBaseline_gradnorm.csv", COLOR["Teacher"], "--"),
-    }
-    fig, ax = plt.subplots(figsize=(9, 5.5))
+    offpolicy_files = [
+        "string_task_offpolicy_Bootstrap_GRPO_gradnorm.csv",
+        "string_task_offpolicy_Bootstrap_REINFORCEBaseline_gradnorm.csv",
+        "string_task_offpolicy_Teacher_GRPO_gradnorm.csv",
+        "string_task_offpolicy_Teacher_REINFORCEBaseline_gradnorm.csv",
+    ]
+
+    onpolicy_vals = []
     for method in onpolicy_methods:
         path = RESULTS_DIR / f"string_task_onpolicy_{method.replace('+', '')}_dense.csv"
         rows = read_csv(path)
-        steps = [int(r["_step"]) for r in rows if r["actor/grad_norm"]]
-        vals = [float(r["actor/grad_norm"]) for r in rows if r["actor/grad_norm"]]
-        ax.plot(steps, vals, linewidth=1.0, alpha=0.6, color=COLOR["On-policy"])
-    ax.plot([], [], linewidth=1.5, color=COLOR["On-policy"], label="On-policy (all losses)")
+        onpolicy_vals += [float(r["actor/grad_norm"]) for r in rows if r["actor/grad_norm"]]
 
-    for label, (fname, color, style) in offpolicy_runs.items():
+    offpolicy_vals = []
+    for fname in offpolicy_files:
         rows = read_csv(RESULTS_DIR / fname)
-        steps = [int(r["_step"]) for r in rows if r["actor/grad_norm"]]
-        vals = [float(r["actor/grad_norm"]) for r in rows if r["actor/grad_norm"]]
-        ax.plot(steps, vals, linewidth=1.8, linestyle=style, color=color, label=label)
+        offpolicy_vals += [float(r["actor/grad_norm"]) for r in rows if r["actor/grad_norm"]]
 
-    ax.set_yscale("log")
-    ax.set_xlabel("Training Step")
-    ax.set_ylabel("Gradient norm (log scale)")
+    all_vals = onpolicy_vals + offpolicy_vals
+    bins = np.logspace(np.log10(min(all_vals)), np.log10(max(all_vals)), 40)
+
+    # density=True divides by linear bin width, which on log-spaced bins makes
+    # the (real, populous) high-value tail bins look artificially tiny. Use
+    # per-group sample-fraction weights instead so heights are directly
+    # comparable and not distorted by bin width.
+    onpolicy_weights = np.ones(len(onpolicy_vals)) / len(onpolicy_vals)
+    offpolicy_weights = np.ones(len(offpolicy_vals)) / len(offpolicy_vals)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.hist(onpolicy_vals, bins=bins, weights=onpolicy_weights, color=COLOR["On-policy"], alpha=0.6,
+            label="On-policy (all losses)")
+    ax.hist(offpolicy_vals, bins=bins, weights=offpolicy_weights, color=COLOR["Teacher"], alpha=0.6,
+            label="Off-policy (collapsed runs)")
+    ax.set_xscale("log")
+    ax.set_xlabel("Gradient norm (log scale)")
+    ax.set_ylabel("Fraction of samples")
     ax.grid(True, alpha=0.3, which="both")
-    ax.legend(loc="lower right", fontsize=BASE_FONT_SIZE - 4)
+    ax.legend(fontsize=BASE_FONT_SIZE - 4)
     fig.tight_layout()
     save(fig, "grad_norm_collapse.png")
 
@@ -217,12 +248,37 @@ def math_bootstrap_sft_figure():
     save(fig, "math_bootstrap_sft_pass1.png")
 
 
+def math_entropy_figure():
+    methods = ["SFT", "POS+NEG", "REINFORCE+Baseline", "GRPO"]
+    file_suffix = {"SFT": "SFT", "POS+NEG": "PosNeg", "REINFORCE+Baseline": "ReinforceBaseline", "GRPO": "GRPO"}
+    splits = {
+        "easy": "val/16-math-easy/entropy/avg",
+        "medium": "val/16-math-medium/entropy/avg",
+        "hard": "val/16-math-hard/entropy/avg",
+    }
+    for split, key in splits.items():
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for method in methods:
+            path = RESULTS_DIR / f"math_onpolicy_{file_suffix[method]}_entropy.csv"
+            rows = read_csv(path)
+            steps = [int(r["_step"]) for r in rows if r[key]]
+            vals = [float(r[key]) for r in rows if r[key]]
+            ax.plot(steps, smooth(vals, 0.5), linewidth=1.8, label=method, color=COLOR[method])
+        ax.set_xlabel("Training Step")
+        ax.set_ylabel(f"Eval entropy ({split}, avg)")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+        save(fig, f"math_entropy_{split}.png")
+
+
 def main():
     configure_plot_style()
     mimic_zone_figure()
     generalization_zone_figure()
     response_length_figure()
     entropy_figure()
+    math_entropy_figure()
     grad_norm_figure()
     grad_norm_collapse_figure()
     math_bootstrap_sft_figure()
