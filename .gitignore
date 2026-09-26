@@ -10,3 +10,8 @@ plots
 __pycache__
 wandb
 *.pyc
+
+# Paper / analysis outputs (kept locally, not in the codebase)
+reports/
+results/
+.DS_Store

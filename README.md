@@ -1,12 +1,19 @@
-# Compositional Generality
+# Dissecting RL
 
-This repository studies compositional generalization in LLMs using a string manipulation task. Models are trained on compositions of a fixed set of string operators at a given depth and evaluated on held-out depths to measure how well learned skills compose.
+This repository dissects LLM post-training along two independent axes, **where the training data comes from** (off-policy to on-policy) and **how each sample is weighted in the loss** (positive-only to group-normalized), to isolate which ingredients of RL (GRPO) actually matter for generalization.
+
+Experiments run on two tasks:
+
+- **String task:** compositional string manipulation; train on depth-2 compositions, evaluate on depths 1–8 (Llama-3.1-8B).
+- **Math task:** competition-style math split into easy / medium / hard; train on easy (or easy+medium), evaluate on all three (Qwen3-1.7B).
 
 Built on [verl](https://github.com/volcengine/verl) (Volcano Engine RL for LLMs). Based on the [RL-Compositionality](https://github.com/PRIME-RL/RL-Compositionality) codebase ([paper](https://huggingface.co/papers/2509.25123)).
 
 ---
 
-## Task
+## Tasks
+
+### String task
 
 Each problem presents a Python `main_solution` function built by composing primitives from a library of 25 string operators (e.g. `reverse_words`, `sort_chars`, `shift_chars`). The model must predict the output of the function on a given input string without executing code.
 
@@ -22,6 +29,10 @@ Please reason and put your final answer in the following json format: {"output":
 
 **Difficulty levels** correspond to composition depth (number of operators applied). Models train on level 2 and are evaluated across levels 1–8 to measure compositional generalization.
 
+### Math task
+
+Math problems are bucketed into `math-easy`, `math-medium` and `math-hard` splits (`data/math/<split>/{train,eval}.parquet`). Answers are graded by `verl/utils/reward_score/entropy_math` (a math-verify-style grader). Each configuration has two variants: `*_math.sh` trains on easy only, and `*_math_medium.sh` trains on easy + medium. Both evaluate on easy, medium and hard.
+
 ---
 
 ## Unified Two-Axis Framework
@@ -30,12 +41,12 @@ This project decomposes post-training into two orthogonal axes and varies each i
 
 |  | **Positive samples only** | **Positive + negative samples** |
 |---|---|---|
-| **Off-policy** | SFT | DPO |
-| **On-policy** | On-policy SFT | GRPO |
+| **Off-policy** (Teacher / Bootstrap) | SFT | POS+NEG, REINFORCE+Baseline, GRPO on fixed rollouts |
+| **On-policy** | On-policy SFT | POS+NEG, REINFORCE+Baseline, GRPO |
 
 ### Data axis
 
-The **data axis** controls where training trajectories come from — ranging from fully off-policy to fully on-policy. See the [Data source modes](#data-source-modes) section under Training for the four concrete settings (Teacher, Bootstrap, Iterative, On-policy).
+The **data axis** controls where training trajectories come from — ranging from fully off-policy to fully on-policy. See [Data sources](#data-sources) under Training for the concrete settings (On-policy, Teacher, Bootstrap).
 
 Key finding: on-policy data alone is not sufficient. Positive-only on-policy SFT contracts response length and entropy and underperforms teacher-distilled off-policy SFT at higher composition levels, because training on only correct short rollouts suppresses the long chain-of-thought trajectories needed for deeper composition.
 
@@ -86,112 +97,125 @@ Key findings on the loss axis: introducing negative gradients (POS+NEG) recovers
 ## Setup
 
 ```bash
-git clone <this-repo>
-cd compositional-generality
+git clone https://github.com/j1mk1m/dissecting-rl.git
+cd dissecting-rl
 pip install -e ".[vllm]"
-conda activate osft
 ```
 
-**Requirements:** 4× A100 GPUs (standard scripts use `CUDA_VISIBLE_DEVICES=0,1,2,3`).
+**Requirements:** 4× A100 GPUs (all scripts use `CUDA_VISIBLE_DEVICES=0,1,2,3`).
 
 ---
 
 ## Data
 
+`data/` is gitignored and must be populated locally.
+
+**String task** (`data/string_task/`)
+
 | Path | Description |
 |---|---|
-| `data/string_task/stage2_level2/train.parquet` | Train set, depth-2 compositions |
-| `data/string_task/stage2_level1to8/test.parquet` | Eval set, depths 1–8 |
-| `data/string_task/stage2_level2_rft/` | Level-2 data for RFT stage |
-| `data/string_task/teacher-grpo/rollout.parquet` | Rollouts from GRPO teacher model |
-| `data/string_task/teacher-bootstrap/rollout.parquet` | Rollouts from base model (bootstrap) |
-| `data/string_task/teacher-rl-checkpoint/` | Rollouts from RL checkpoint teacher |
+| `stage2_level2/train.parquet` | Train set, depth-2 compositions |
+| `stage2_level1to8/test.parquet` | Eval set, depths 1–8 |
+| `teacher-grpo/rollout.parquet` | Rollouts from the on-policy GRPO model (`gyeongwk/On-policy-GRPO`) |
+| `teacher-bootstrap/rollout.parquet` | Rollouts from the initial model `gyeongwk/stage1-rft` |
 
-To regenerate datasets:
+Regenerate the string datasets with:
 ```bash
 python scripts/data_preprocess/string_data.py
 python scripts/data_preprocess/string_data_analysis.py --input <parquet>
+```
+
+**Math task** (`data/math/`)
+
+| Path | Description |
+|---|---|
+| `math-{easy,medium,hard}/{train,eval}.parquet` | Difficulty splits |
+| `teacher/qwen3-1.7b/math-{easy,medium}-train.parquet` | Rollouts from `gyeongwk/Math-On-policy-GRPO-Qwen3-1.7B-step-1800` |
+| `bootstrap/qwen3-1.7b/math-{easy,medium}-train.parquet` | Rollouts from base `Qwen/Qwen3-1.7B` |
+
+Check that the math parquets are compatible with the training pipeline:
+```bash
+python scripts/test_math_dataset.py
 ```
 
 ---
 
 ## Training
 
-All methods use the OSFT recipe (`recipe.osft.main_osft`) with backbone `gyeongwk/stage1-rft` (Llama-3.1-8B fine-tuned on depth-1 data via RFT).
+All methods use the OSFT recipe (`recipe.osft.main_osft`). The loss function is selected by the flags in the summary table above, and the data source by `trainer.data_source.mode`.
 
-### Data source modes
+### Data sources
 
-The `trainer.data_source.mode` flag selects how training trajectories are sourced. Each data source can be combined with any of the five loss functions above.
+**On-policy** (`mode=on_policy`): the policy samples $G$ completions per prompt at every step.
 
-**`on_policy`** — The policy rolls out $G$ completions per prompt at every training step. The actor weights are always up to date with the rollout policy. This is the standard online RL regime.
+**Teacher** (`mode=teacher`): trains on a fixed parquet of rollouts from a stronger model, the GRPO-trained checkpoint. The student is never used to generate rollouts.
 
-**`bootstrap`** — Rollouts are generated once from the initial base model (before any training) and cached. The same fixed set of trajectories is replayed throughout training — no further rollouts are generated. Since the actor drifts away from the data-generating policy over time this becomes increasingly off-policy.
+**Bootstrap** (`mode=teacher`, base-model rollouts): same mechanism as Teacher, but the fixed rollouts come from the *initial* model. The data is on-policy at step 0 and grows increasingly off-policy as training proceeds.
 
-**`iterative`** — A middle ground: rollouts are generated from the current checkpoint every $k$ training steps (`trainer.data_source.iterative_k`). Between regenerations the cached batch is replayed, introducing a small amount of off-policy lag that grows with $k$.
+`mode=iterative` (regenerate rollouts from the current checkpoint every `trainer.data_source.iterative_k` steps) and `mode=bootstrap` are also implemented in `recipe/osft/data_source_controller.py`, but the scripts in this repo don't use them.
 
-**`teacher`** — Rollouts come from a separate, fixed teacher model (e.g. `gyeongwk/On-policy-GRPO` trained via GRPO). The teacher trajectories are loaded from a pre-generated parquet file (`data/string_task/teacher-grpo/rollout.parquet`). The student policy is never used for rollouts — training is entirely off-policy relative to the student.
+### String task scripts
 
-### Quick start
-
-Three experiment groups vary one axis each while holding the others fixed:
+Backbone: `gyeongwk/stage1-rft` (Llama-3.1-8B, RFT on depth-1 data). W&B project: `string-task`.
 
 ```bash
-# On-policy rollouts — vary loss function
-bash experiments/data-onpolicy-loss-fn-vary/onpolicy_sft.sh
-bash experiments/data-onpolicy-loss-fn-vary/onpolicy_grpo.sh
-bash experiments/data-onpolicy-loss-fn-vary/onpolicy_pos_neg.sh
-bash experiments/data-onpolicy-loss-fn-vary/onpolicy_reinforce_baseline.sh
-
-# Teacher rollouts (gyeongwk/On-policy-GRPO) — vary loss function
-bash experiments/data-teacher-loss-fn-vary/teacher_sft.sh
-bash experiments/data-teacher-loss-fn-vary/teacher_grpo.sh
-bash experiments/data-teacher-loss-fn-vary/teacher_pos_neg.sh
-bash experiments/data-teacher-loss-fn-vary/teacher_reinforce_baseline.sh
-
-# Bootstrap rollouts (base model) — vary loss function
-bash experiments/data-bootstrap-loss-fn-vary/bootstrap_sft.sh
-bash experiments/data-bootstrap-loss-fn-vary/bootstrap_grpo.sh
-bash experiments/data-bootstrap-loss-fn-vary/bootstrap_pos_neg.sh
-bash experiments/data-bootstrap-loss-fn-vary/bootstrap_reinforce_baseline.sh
+# {sft, grpo, pos_neg, reinforce_baseline} for each data source
+bash experiments/string/data-onpolicy-loss-fn-vary/onpolicy_grpo.sh
+bash experiments/string/data-teacher-loss-fn-vary/teacher_grpo.sh
+bash experiments/string/data-bootstrap-loss-fn-vary/bootstrap_grpo.sh
 ```
 
-### Cluster (Slurm)
+`experiments/string/stage1_rft.sbatch` produces the stage-1 backbone. `experiments/string/run_modal.py` runs any script on Modal.
 
-Use `deploy/launcher.py` to submit any experiment script via a Slurm template:
+### Math task scripts
+
+Backbone: `Qwen/Qwen3-1.7B`. W&B project: `math-task`. All scripts live in `experiments/math/` and are named `{onpolicy,teacher,bootstrap}_{sft,grpo,pos_neg,reinforce_baseline}_math[_medium].sh`.
 
 ```bash
-# Default template (general partition, 4 GPUs)
-python deploy/launcher.py experiments/data-onpolicy-loss-fn-vary/onpolicy_sft.sh
+# 1. Pre-generate off-policy rollouts (starts a local vLLM server, TP=4)
+bash experiments/math/generate_bootstrap.sh         # base-model rollouts, easy
+bash experiments/math/generate_teacher.sh           # GRPO-teacher rollouts, easy
+#    (*_medium.sh variants add the medium split)
 
-# Specific templates
-python deploy/launcher.py experiments/... --template deploy/template_A100_80GB.sbatch
-python deploy/launcher.py experiments/... --template deploy/template_flame.sbatch
+# 2. Train
+bash experiments/math/onpolicy_grpo_math.sh         # train on easy
+bash experiments/math/teacher_sft_math_medium.sh    # train on easy + medium
+
+# 3. Convert FSDP checkpoints to HF format and upload
+bash experiments/math/convert_and_upload.sh
 ```
-
-Available templates:
-
-| File | Partition | Notes |
-|---|---|---|
-| `template.sbatch` | `general` | Default |
-| `template_A100_80GB.sbatch` | `general` | Requests A100 80GB explicitly |
-| `template_flame.sbatch` | `flame-earlybirds` | Flame cluster early-bird queue |
-| `template_light.sbatch` | — | Lighter resource request |
-| `template_preempt.sbatch` | — | Preemptible jobs |
-| `template_modal.sbatch` | — | Modal cloud |
 
 ### Key hyperparameters
 
-| Parameter | Value |
+| Parameter | String task | Math task |
+|---|---|---|
+| Backbone | `gyeongwk/stage1-rft` (Llama-3.1-8B) | `Qwen/Qwen3-1.7B` |
+| GPUs | 4 | 4 |
+| Rollouts per prompt ($G$) | 16 | 16 |
+| Train batch size | 16 prompts | 16 prompts |
+| Max prompt / response length | 1024 / 4096 | 1024 / 4096 |
+| Learning rate | 1e-6, 5 warmup steps | 1e-6, 5 warmup steps |
+| Epochs | 1 | 1 |
+| Validation frequency | 25 (on-policy) / 100 (off-policy) steps | 50 steps |
+
+### Cluster (Slurm)
+
+`deploy/launcher.py` submits any experiment script through a Slurm template:
+
+```bash
+python deploy/launcher.py experiments/math/onpolicy_grpo_math.sh
+python deploy/launcher.py experiments/... --template deploy/template_A100_80GB.sbatch
+```
+
+| Template | Notes |
 |---|---|
-| Backbone | `gyeongwk/stage1-rft` (Llama-3.1-8B) |
-| GPUs | 4 |
-| Rollouts per prompt ($G$) | 16 |
-| Train batch size | 16 prompts |
-| Max prompt length | 1024 tokens |
-| Max response length | 4096 tokens |
-| Learning rate | 1e-6 with 5 warmup steps |
-| Epochs | 1 |
-| Validation frequency | every 25 steps (on-policy) / 100 steps (off-policy) |
+| `template.sbatch` | Default (`general` partition) |
+| `template_A100_80GB.sbatch` | Requests A100 80GB |
+| `template_flame.sbatch` | `flame-earlybirds` queue |
+| `template_light.sbatch` | Lighter resource request |
+| `template_cpu.sbatch` | CPU-only jobs |
+| `template_preempt.sbatch` | Preemptible jobs |
+| `template_modal.sbatch` | Modal cloud |
 
 ### Resuming from checkpoint
 
@@ -204,110 +228,72 @@ python3 -m recipe.osft.main_osft \
 
 ---
 
-## Offline Generation Pipeline
+## Offline Generation (string task)
 
-Teacher and bootstrap rollouts are pre-generated via a two-step vLLM server workflow before running off-policy training scripts.
+String-task teacher and bootstrap rollouts are generated with a separate vLLM server and client:
 
-**Step 1 — start a vLLM server:**
 ```bash
-# Local
-bash experiments/util/serve_vllm.sh
-
-# Slurm
-sbatch deploy/serve_vllm.sbatch
+bash experiments/util/serve_vllm.sh          # or: sbatch deploy/serve_vllm.sbatch
+bash experiments/util/generation_client.sh   # or: sbatch deploy/generation_client.sbatch
 ```
 
-`serve_vllm.sh` checks that the target port is free, then launches `vllm serve` with tensor-parallel-size 4.
-
-**Step 2 — generate rollouts:**
-```bash
-# Local (edit MODEL, MACHINE, PORT, output path first)
-bash experiments/util/generation_client.sh
-
-# Slurm
-sbatch deploy/generation_client.sbatch
-```
-
-`generation_client.sh` calls `scripts/generation/generate_with_vllm_server.py`, which streams requests to the running server with retry/backoff and checkpoints progress to a `.jsonl` file so interrupted runs resume automatically.
-
-Key flags for the generation script:
-
-| Flag | Description |
-|---|---|
-| `--data-path` | Input parquet file |
-| `--output-path` | Output parquet with generated responses |
-| `--n-samples` | Rollouts per prompt (default 16) |
-| `--checkpoint-path` | JSONL resume checkpoint |
-| `--num-workers` | Concurrent HTTP workers |
+Both tasks use `scripts/generation/generate_with_vllm_server.py`. It streams requests with retry/backoff and checkpoints progress to a `.jsonl` file, so interrupted runs resume where they left off. Key flags: `--data-path`, `--output-path`, `--n-samples`, `--checkpoint-path`, `--num-workers`.
 
 ---
 
-## Evaluation
+## Evaluation & Analysis
 
-```bash
-# Generate rollouts from a checkpoint
-bash experiments/eval/eval.sh       # greedy decode, levels 1–8
+During training, validation runs every `trainer.test_freq` steps with greedy decoding and logs per-split accuracy to W&B (`val/...`).
 
-# Score rollouts
-python scripts/evaluation/process_eval.py eval/<run>/rollout.parquet eval/<run>/accuracy.json
-```
+- `scripts/evaluation/process_eval.py`: scores a rollout parquet and reports per-level accuracy broken down by operator.
+- `scripts/analysis/fetch_wandb_training_dynamics.py`: pulls training curves from W&B into `results/*.csv`.
+- `scripts/analysis/plot_training_dynamics.py` and the other `plot_*.py` scripts: paper figures written to `reports/imgs/`.
 
-`eval.sh` calls `verl.trainer.main_generation` (4 GPUs, greedy, max 4096 tokens) then pipes the output parquet to `process_eval.py`, which computes per-level accuracy broken down by operator.
+`results/` and `reports/` (paper draft, figures, write-ups) are gitignored and kept locally only.
 
 ---
 
 ## Repository Structure
 
 ```
-verl/                         # verl framework (Ray, FSDP, vLLM rollout)
-recipe/osft/                  # Training recipe
-  main_osft.py                # Entry point
-  osft_trainer.py             # RayOSFTTrainer training loop
-  osft_sample_selection.py    # Per-sample weight computation (all loss variants)
-  dp_actor.py                 # Weighted NLL loss + backward
-  data_source_controller.py   # Trajectory source selection (on-policy/teacher/bootstrap/iterative)
-  config/osft_trainer.yaml    # All configurable options
+verl/                           # verl framework (Ray, FSDP, vLLM rollout)
+recipe/osft/                    # Training recipe
+  main_osft.py                  # Entry point
+  osft_trainer.py               # RayOSFTTrainer training loop
+  osft_sample_selection.py      # Per-sample weight computation (all loss variants)
+  dp_actor.py                   # Weighted NLL loss + backward
+  data_source_controller.py     # Trajectory source selection
+  config/osft_trainer.yaml      # All configurable options
+recipe/dpo/                     # DPO trainer (not used in the main experiments)
+
+experiments/
+  string/                       # String task: {onpolicy,teacher,bootstrap} × loss
+  math/                         # Math task: generation, training, checkpoint conversion
+  util/                         # vLLM server + generation client
+  _archive/                     # Old DPO / GRPO / SFT templates
+deploy/                         # Slurm launcher and templates
 
 scripts/
-  data_preprocess/
-    string_data.py            # Dataset generation (25 operators, compositions)
-    string_data_analysis.py   # Composition distribution analysis
-  generation/
-    generate_with_vllm_server.py  # Offline rollout generation via vLLM server
-  evaluation/
-    process_eval.py           # Score rollout parquets, compute per-level accuracy
-  analysis/                   # Plotting and token-length analysis scripts
-
-data/string_task/             # Train/eval parquet files
-eval/                         # Evaluation rollouts and accuracy JSONs
-experiments/
-  data-onpolicy-loss-fn-vary/ # On-policy × {SFT, GRPO, POS+NEG, REINFORCE+}
-  data-teacher-loss-fn-vary/  # Teacher data × {SFT, GRPO, POS+NEG, REINFORCE+}
-  data-bootstrap-loss-fn-vary/ # Bootstrap data × {SFT, GRPO, POS+NEG, REINFORCE+}
-  util/                       # serve_vllm.sh + generation_client.sh
-  eval/                       # Evaluation scripts
-deploy/
-  launcher.py                 # Submit any experiment script via sbatch template
-  template*.sbatch            # Slurm templates (general / A100 / flame / light / preempt / modal)
-  serve_vllm.sbatch           # Slurm job for vLLM server
-  generation_client.sbatch    # Slurm job for generation client
+  data_preprocess/              # String dataset generation and analysis
+  generation/                   # Offline rollout generation via vLLM server
+  evaluation/                   # Rollout scoring
+  analysis/                     # W&B fetching, plotting, rollout analysis
+  model_merger.py               # FSDP checkpoint → HF conversion
+  test_math_dataset.py          # Math parquet sanity checks
 ```
 
 ---
 
 ## Monitoring
 
-Runs log to W&B under project `string-task`. Key metrics:
+Runs log to W&B under the projects `string-task` and `math-task`. Key metrics:
 
 | Metric | Description |
 |---|---|
 | `reward/score/mean` | Mean rollout reward before filtering |
-| `training/n_positive_seq` | Positive samples per batch |
-| `training/n_negative_seq` | Negative samples per batch (0 for SFT/GRPOMask) |
+| `training/n_positive_seq` / `n_negative_seq` | Positive / negative samples per batch |
 | `training/weight_mean` | Mean sample weight sent to the actor |
-| `training/data_source_is_off_policy` | 1 if using teacher/bootstrap/iterative data |
-| `actor/pg_loss` | Loss value |
-| `actor/perplexity` | Response perplexity |
-| `val/...` | Validation accuracy by level |
-
-Rollout generations are saved to `trainer.rollout_data_dir` and validation rollouts to `trainer.validation_data_dir` every step.
+| `training/data_source_is_off_policy` | 1 when training on teacher/bootstrap data |
+| `actor/pg_loss`, `actor/grad_norm` | Loss and gradient norm |
+| `rollout/avg_response_length` | Mean response length |
+| `val/<split>/...` | Validation accuracy and entropy per level / difficulty split |
